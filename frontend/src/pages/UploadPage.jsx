@@ -10,7 +10,8 @@ const fadeUp = { initial: { opacity: 0, y: 20 }, animate: { opacity: 1, y: 0, tr
 
 export default function UploadPage() {
   const { user } = useAuth();
-  const [text, setText] = useState('');
+  const [file, setFile] = useState(null);
+  const [dragActive, setDragActive] = useState(false);
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [parsed, setParsed] = useState(null);
@@ -24,15 +25,28 @@ export default function UploadPage() {
 
   useEffect(() => { fetchResumes(); }, [fetchResumes]);
 
-  useEffect(() => { fetchResumes(); }, [fetchResumes]);
+  const handleDrag = (e) => { e.preventDefault(); e.stopPropagation(); setDragActive(e.type === 'dragenter' || e.type === 'dragover'); };
+  const handleDrop = (e) => { e.preventDefault(); setDragActive(false); if (e.dataTransfer.files?.[0]) handleFile(e.dataTransfer.files[0]); };
+  const handleFile = (f) => { if (f.type !== 'application/pdf') { toast.error('PDF only'); return; } setFile(f); setParsed(null); };
 
   const handleUpload = async () => {
-    if (!text.trim()) return;
-    setLoading(true); setProgress(20);
+    if (!file) return;
+    setLoading(true); setProgress(10);
     const tid = toast.loading('Parsing resume with AI...');
     try {
+      // Upload to Supabase Storage
+      setProgress(20);
+      const filePath = `${user.id}/${Date.now()}_${file.name}`;
+      const { data: uploadData, error: uploadError } = await supabase.storage.from('resumes').upload(filePath, file);
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage.from('resumes').getPublicUrl(filePath);
+      setProgress(40);
+
       // Parse via backend
-      const res = await api.post('/parse-text', { text });
+      const formData = new FormData();
+      formData.append('resume', file);
+      const res = await api.post('/parse-resume', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
       setProgress(80);
 
       const parsedJSON = res.data.parsed;
@@ -40,8 +54,8 @@ export default function UploadPage() {
 
       // Save to DB
       const { error: insertError } = await supabase.from('resumes').insert({
-        user_id: user.id, name: nickname || 'Pasted Resume', nickname: nickname || 'Pasted Resume',
-        pdf_url: null, parsed_json: parsedJSON, file_hash: res.data.file_hash
+        user_id: user.id, name: file.name, nickname: nickname || file.name.replace('.pdf', ''),
+        pdf_url: publicUrl, parsed_json: parsedJSON, file_hash: res.data.file_hash
       });
       if (insertError) throw insertError;
 
@@ -69,42 +83,53 @@ export default function UploadPage() {
         <p style={{ color: 'var(--text-secondary)', fontSize: 15, marginBottom: 28 }}>Upload your PDF resume and let AI extract your skills, experience, and projects.</p>
       </motion.div>
 
-      {/* Paste Zone */}
-      <motion.div variants={fadeUp} className="card-static" style={{ padding: 24, marginBottom: 24 }}>
-        <textarea
-          className="input-field"
-          placeholder="Paste your resume text here..."
-          value={text}
-          onChange={e => setText(e.target.value)}
-          style={{ width: '100%', minHeight: 200, resize: 'vertical', marginBottom: 16, fontFamily: 'inherit' }}
-        />
-        
-        {loading && (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
-            <svg width="40" height="40" viewBox="0 0 100 100" style={{ transform: 'rotate(-90deg)' }}>
-              <circle cx="50" cy="50" r="45" fill="none" stroke="var(--border)" strokeWidth="6" />
-              <circle cx="50" cy="50" r="45" fill="none" stroke="var(--accent)" strokeWidth="6"
-                strokeDasharray={283} strokeDashoffset={283 - (283 * progress / 100)}
-                strokeLinecap="round" style={{ transition: 'stroke-dashoffset 0.5s ease' }} />
-            </svg>
-          </div>
-        )}
+      {/* Drop Zone */}
+      <motion.div variants={fadeUp}
+        className={`card-static ${dragActive ? 'drop-zone-active' : ''}`}
+        onDragEnter={handleDrag} onDragOver={handleDrag} onDragLeave={handleDrag} onDrop={handleDrop}
+        style={{ padding: 48, textAlign: 'center', border: '2px dashed', borderColor: dragActive ? 'var(--accent)' : 'var(--border-light)', borderRadius: 16, cursor: 'pointer', transition: 'all 0.3s', marginBottom: 24 }}
+        onClick={() => !file && document.getElementById('file-input').click()}
+      >
+        <input id="file-input" type="file" accept=".pdf" hidden onChange={e => e.target.files[0] && handleFile(e.target.files[0])} />
 
-        {!loading && !parsed && (
-          <div style={{ display: 'flex', gap: 12, alignItems: 'center', justifyContent: 'space-between' }}>
-            <input className="input-field" placeholder="Resume nickname (optional)" value={nickname} onChange={e => setNickname(e.target.value)} style={{ width: 220 }} />
-            <button className="btn-primary" onClick={handleUpload} disabled={!text.trim()}>Analyze & Save</button>
-          </div>
-        )}
-        
-        {!loading && parsed && (
-          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 16, marginBottom: 16 }}>
-            <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 300 }}>
-              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" className="draw-check">
-                <path d="M5 13l4 4L19 7" stroke="var(--success)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+        {!file ? (
+          <>
+            <div style={{ width: 56, height: 56, borderRadius: 14, background: 'rgba(59,130,246,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+              <Upload size={24} color="var(--accent)" />
+            </div>
+            <p style={{ fontWeight: 600, marginBottom: 4 }}><span style={{ color: 'var(--accent)' }}>Click to upload</span> or drag and drop</p>
+            <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>PDF format only (max 10MB)</p>
+          </>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
+            {/* Progress ring */}
+            {loading && (
+              <svg width="80" height="80" viewBox="0 0 100 100" style={{ transform: 'rotate(-90deg)' }}>
+                <circle cx="50" cy="50" r="45" fill="none" stroke="var(--border)" strokeWidth="6" />
+                <circle cx="50" cy="50" r="45" fill="none" stroke="var(--accent)" strokeWidth="6"
+                  strokeDasharray={283} strokeDashoffset={283 - (283 * progress / 100)}
+                  strokeLinecap="round" style={{ transition: 'stroke-dashoffset 0.5s ease' }} />
               </svg>
-            </motion.div>
-            <button className="btn-primary" onClick={() => { setText(''); setParsed(null); }}>Parse Another</button>
+            )}
+            {!loading && parsed && (
+              <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 300 }}>
+                <svg width="60" height="60" viewBox="0 0 24 24" fill="none" className="draw-check">
+                  <path d="M5 13l4 4L19 7" stroke="var(--success)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </motion.div>
+            )}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <File size={20} color="var(--accent)" />
+              <span style={{ fontWeight: 500 }}>{file.name}</span>
+              <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>({(file.size / 1024).toFixed(0)} KB)</span>
+              {!loading && <button onClick={(e) => { e.stopPropagation(); setFile(null); setParsed(null); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}><X size={16} /></button>}
+            </div>
+            {!loading && !parsed && (
+              <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                <input className="input-field" placeholder="Resume nickname (optional)" value={nickname} onChange={e => setNickname(e.target.value)} style={{ width: 220 }} onClick={e => e.stopPropagation()} />
+                <button className="btn-primary" onClick={(e) => { e.stopPropagation(); handleUpload(); }}>Analyze & Save</button>
+              </div>
+            )}
           </div>
         )}
       </motion.div>
@@ -147,12 +172,10 @@ export default function UploadPage() {
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                   <span className="badge badge-success"><CheckCircle size={12} /> Parsed</span>
-                  {r.pdf_url && (
-                    <a href={r.pdf_url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--text-muted)', display: 'flex', alignItems: 'center', transition: 'color 0.15s' }}
-                      onMouseEnter={e => e.currentTarget.style.color = 'var(--accent)'} onMouseLeave={e => e.currentTarget.style.color = 'var(--text-muted)'}>
-                      <Eye size={16} />
-                    </a>
-                  )}
+                  <a href={r.pdf_url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--text-muted)', display: 'flex', alignItems: 'center', transition: 'color 0.15s' }}
+                    onMouseEnter={e => e.currentTarget.style.color = 'var(--accent)'} onMouseLeave={e => e.currentTarget.style.color = 'var(--text-muted)'}>
+                    <Eye size={16} />
+                  </a>
                   <button onClick={() => handleDelete(r.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', transition: 'color 0.15s' }}
                     onMouseEnter={e => e.target.style.color = 'var(--error)'} onMouseLeave={e => e.target.style.color = 'var(--text-muted)'}>
                     <Trash2 size={16} />

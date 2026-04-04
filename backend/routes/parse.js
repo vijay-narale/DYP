@@ -1,4 +1,4 @@
-import express, { Router } from 'express';
+import { Router } from 'express';
 import multer from 'multer';
 import { createClient } from '@supabase/supabase-js';
 import { extractTextFromPDF, computeFileHash } from '../services/pdfParser.js';
@@ -10,7 +10,6 @@ dotenv.config();
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
-import crypto from 'crypto';
 
 router.post('/parse-resume', verifyAuth, upload.single('resume'), async (req, res) => {
   try {
@@ -52,39 +51,3 @@ router.post('/parse-resume', verifyAuth, upload.single('resume'), async (req, re
 });
 
 export default router;
-
-router.post('/parse-text', verifyAuth, express.json(), async (req, res) => {
-  try {
-    const { text } = req.body;
-    if (!text || text.trim().length < 30) {
-      return res.status(400).json({ error: 'Text appears to be empty or too short' });
-    }
-
-    const textHash = crypto.createHash('sha256').update(text).digest('hex');
-    console.log(`📝 Resume text paste for user ${req.userId}, hash: ${textHash.slice(0, 12)}...`);
-
-    // Check cache
-    const { data: cached } = await supabase
-      .from('resumes')
-      .select('parsed_json')
-      .eq('user_id', req.userId)
-      .eq('file_hash', textHash)
-      .not('parsed_json', 'is', null)
-      .limit(1)
-      .single();
-
-    if (cached?.parsed_json) {
-      console.log(`⚡ Cache hit! Returning cached parse for hash ${textHash.slice(0, 12)}`);
-      return res.json({ raw_text: text, parsed: cached.parsed_json, cached: true, file_hash: textHash });
-    }
-
-    // AI parse
-    const parsedData = await parseResume(text);
-    console.log(`✅ Resume text parsed for ${req.userId}`);
-
-    res.json({ raw_text: text, parsed: parsedData, file_hash: textHash, cached: false });
-  } catch (error) {
-    console.error('Parse error:', error);
-    res.status(500).json({ error: error.message || 'Failed to parse resume text' });
-  }
-});
