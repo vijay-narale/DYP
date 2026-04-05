@@ -149,6 +149,7 @@ function LiveInterviewRoom({ questions, onComplete, onExit, jdText }) {
   }, [currentIdx, questions, speakText]);
 
   const handleEvaluateAndNext = async () => {
+    if (currentIdx >= questions.length) return; // Prevent extra clicks
     const finalAnswer = (transcript + ' ' + manualAnswer).trim() || "[No Answer Provided]";
     setIsEvaluating(true);
     try {
@@ -170,8 +171,12 @@ function LiveInterviewRoom({ questions, onComplete, onExit, jdText }) {
       }, 5000);
     } catch (err) {
       toast.error("AI Analysis failed. Moving to next.");
-      setCurrentIdx(i => i + 1);
-      setIsEvaluating(false);
+      if (currentIdx < questions.length - 1) {
+        setCurrentIdx(i => i + 1);
+        setIsEvaluating(false);
+      } else {
+        onComplete({ switches, focusLevel, transcript });
+      }
     }
   };
 

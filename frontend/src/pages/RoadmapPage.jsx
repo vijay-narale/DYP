@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Lock, CheckCircle, Circle, ChevronRight, Trophy, Sparkles, Building2, BookOpen, Target } from 'lucide-react';
+import { Lock, CheckCircle, Circle, ChevronRight, Trophy, Sparkles, Building2, BookOpen, Target, RotateCcw } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import api, { streamFetch } from '../lib/api';
