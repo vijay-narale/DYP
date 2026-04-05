@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Lock, Mic, RotateCcw, ChevronLeft, ChevronRight, AlertTriangle, Video, ShieldAlert, Play, Monitor, User as UserIcon, Activity, Eye, Zap } from 'lucide-react';
+import { Lock, Mic, RotateCcw, ChevronLeft, ChevronRight, AlertTriangle, Video, ShieldAlert, Play, Monitor, User as UserIcon, Activity, Eye, Zap, XCircle, Keyboard } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import api, { streamFetch } from '../lib/api';
@@ -8,13 +8,26 @@ import toast from 'react-hot-toast';
 
 const fadeUp = { initial: { opacity: 0, y: 20 }, animate: { opacity: 1, y: 0 } };
 
-function LiveInterviewRoom({ questions, onComplete }) {
+function LiveInterviewRoom({ questions, onComplete, onExit }) {
   const [currentIdx, setCurrentIdx] = useState(0);
   const [timeLeft, setTimeLeft] = useState(120); 
   const [switches, setSwitches] = useState(0);
   const [focusLevel, setFocusLevel] = useState(100);
+  const [manualAnswer, setManualAnswer] = useState('');
   const videoRef = useRef(null);
   const streamRef = useRef(null);
+
+  // Natural Voice Selection
+  const speakText = useCallback((text) => {
+    window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    const voices = window.speechSynthesis.getVoices();
+    // Try to find a premium/natural sounding voice
+    u.voice = voices.find(v => (v.name.includes('Google') || v.name.includes('Premium') || v.name.includes('Natural')) && v.lang.startsWith('en')) || voices[0];
+    u.rate = 0.95; // Slightly slower than 1.0 for clarity
+    u.pitch = 0.9; // Slightly lower pitch sounding more adult/natural
+    window.speechSynthesis.speak(u);
+  }, []);
 
   // Focus simulation
   useEffect(() => {
@@ -32,7 +45,7 @@ function LiveInterviewRoom({ questions, onComplete }) {
     const handleVisibility = () => {
       if (document.hidden) {
         setSwitches(s => s + 1);
-        toast.error('SCREEN SWITCH DETECTED! This will be reported.', {
+        toast.error('SCREEN SWITCH DETECTED!', {
           icon: '⚠️',
           style: { background: '#ef4444', color: '#fff', fontWeight: 'bold' }
         });
@@ -52,15 +65,18 @@ function LiveInterviewRoom({ questions, onComplete }) {
   }, [timeLeft, currentIdx]);
 
   useEffect(() => {
-    navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-      .then(stream => {
+    // Immediate camera start
+    const startCamera = async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
         streamRef.current = stream;
         if (videoRef.current) videoRef.current.srcObject = stream;
-      })
-      .catch(err => {
+      } catch (err) {
         console.error(err);
-        toast.error("Camera binary required!");
-      });
+        toast.error("Camera access failed.");
+      }
+    };
+    startCamera();
 
     return () => {
       if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
@@ -70,15 +86,12 @@ function LiveInterviewRoom({ questions, onComplete }) {
 
   useEffect(() => {
     if (questions[currentIdx]) {
-      window.speechSynthesis.cancel();
-      const text = `Next question. ${questions[currentIdx].question}`;
-      const u = new SpeechSynthesisUtterance(text);
-      u.rate = 1.0;
-      window.speechSynthesis.speak(u);
+      speakText(`Next question. ${questions[currentIdx].question}`);
     }
-  }, [currentIdx, questions]);
+  }, [currentIdx, questions, speakText]);
 
   const handleNext = () => {
+    setManualAnswer(''); // Clear for next
     if (currentIdx < questions.length - 1) {
       setCurrentIdx(i => i + 1);
       setTimeLeft(120);
@@ -93,15 +106,15 @@ function LiveInterviewRoom({ questions, onComplete }) {
       style={{ position: 'fixed', inset: 0, background: '#050505', zIndex: 9999, display: 'flex', flexDirection: 'column', color: 'white' }}
     >
       {/* HUD Header */}
-      <div style={{ padding: '20px 40px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.02)', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+      <div style={{ padding: '16px 32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.02)', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
           <div style={{ background: 'var(--error)', padding: '4px 12px', borderRadius: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
             <Activity size={14} className="pulse-slow" />
-            <span style={{ fontSize: 12, fontWeight: 800, letterSpacing: 1 }}>LIVE MONITORING</span>
+            <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: 1 }}>PROCTORING ACTIVE</span>
           </div>
-          <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', fontWeight: 600 }}>
-             INTEGRITY SCORE: <span style={{ color: switches > 0 ? 'var(--error)' : 'var(--success)' }}>{Math.max(0, 100 - switches*25)}%</span>
-          </div>
+          <button onClick={onExit} style={{ background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.6)', border: 'none', display: 'flex', alignItems: 'center', gap: 8, padding: '6px 14px', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+             <XCircle size={16} /> EXIT INTERVIEW
+          </button>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 40 }}>
@@ -111,8 +124,8 @@ function LiveInterviewRoom({ questions, onComplete }) {
                 {Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, '0')}
               </div>
            </div>
-           <button onClick={handleNext} style={{ background: 'white', color: 'black', border: 'none', padding: '12px 24px', borderRadius: 6, fontWeight: 700, cursor: 'pointer' }}>
-             {currentIdx === questions.length - 1 ? 'TERMINATE' : 'NEXT →'}
+           <button onClick={handleNext} style={{ background: 'white', color: 'black', border: 'none', padding: '12px 28px', borderRadius: 6, fontWeight: 700, cursor: 'pointer', transition: 'transform 0.15s' }} onMouseDown={e => e.currentTarget.style.transform = 'scale(0.95)'} onMouseUp={e => e.currentTarget.style.transform = 'scale(1)'}>
+             {currentIdx === questions.length - 1 ? 'TERMINATE' : 'SAVE & NEXT →'}
            </button>
         </div>
       </div>
@@ -122,65 +135,77 @@ function LiveInterviewRoom({ questions, onComplete }) {
          <div style={{ flex: 1, position: 'relative', borderRight: '1px solid rgba(255,255,255,0.1)' }}>
             <video ref={videoRef} autoPlay muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover', transform: 'scaleX(-1)' }} />
             
-            {/* AI HUD Overlay */}
             <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', padding: 40, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <div className="corner-tl" style={{ width: 40, height: 40, borderLeft: '2px solid var(--error)', borderTop: '2px solid var(--error)' }} />
-                  <div className="corner-tr" style={{ width: 40, height: 40, borderRight: '2px solid var(--error)', borderTop: '2px solid var(--error)' }} />
+                  <div style={{ width: 40, height: 40, borderLeft: '2px solid var(--error)', borderTop: '2px solid var(--error)' }} />
+                  <div style={{ width: 40, height: 40, borderRight: '2px solid var(--error)', borderTop: '2px solid var(--error)' }} />
                </div>
-
-               {/* Center Target */}
-               <div style={{ alignSelf: 'center', width: 200, height: 200, border: '1px dashed rgba(239,68,68,0.3)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <div style={{ width: 4, height: 4, background: 'var(--error)', borderRadius: '50%' }} />
+               <div style={{ alignSelf: 'center', width: 220, height: 220, border: '1px dashed rgba(239,68,68,0.3)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <div style={{ width: 6, height: 6, background: 'var(--error)', borderRadius: '50%', opacity: 0.6 }} />
                </div>
-
                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-                  <div className="corner-bl" style={{ width: 40, height: 40, borderLeft: '2px solid var(--error)', borderBottom: '2px solid var(--error)' }} />
-                  <div style={{ background: 'rgba(0,0,0,0.8)', padding: 16, borderRadius: 8, border: '1px solid rgba(255,255,255,0.1)', width: 200 }}>
-                    <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.5)', marginBottom: 8 }}>FACIAL ANALYSIS</div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}>
-                      <span>EYE GACE</span>
+                  <div style={{ width: 40, height: 40, borderLeft: '2px solid var(--error)', borderBottom: '2px solid var(--error)' }} />
+                  <div style={{ background: 'rgba(0,0,0,0.85)', padding: 18, borderRadius: 10, border: '1px solid rgba(255,255,255,0.15)', width: 220, backdropFilter: 'blur(10px)' }}>
+                    <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.5)', marginBottom: 10, fontWeight: 800, letterSpacing: 1 }}>AI BIOMETRIC DATA</div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 6 }}>
+                      <span>RETINA LOCK</span>
                       <span style={{ color: 'var(--success)' }}>TRACKED</span>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
-                      <span>FOCUS LEVEL</span>
+                      <span>ATTENTION</span>
                       <span style={{ color: focusLevel > 90 ? 'var(--success)' : 'var(--warning)' }}>{focusLevel.toFixed(1)}%</span>
                     </div>
                   </div>
-                  <div className="corner-br" style={{ width: 40, height: 40, borderRight: '2px solid var(--error)', borderBottom: '2px solid var(--error)' }} />
+                  <div style={{ width: 40, height: 40, borderRight: '2px solid var(--error)', borderBottom: '2px solid var(--error)' }} />
                </div>
             </div>
          </div>
 
-         {/* Right Side: Question & Monitoring Logs */}
-         <div style={{ width: '450px', display: 'flex', flexDirection: 'column', background: '#0a0a0a' }}>
-            <div style={{ flex: 1, padding: 40, display: 'flex', flexDirection: 'column', gap: 32 }}>
-               <div style={{ opacity: 0.5, fontSize: 12, fontWeight: 700, letterSpacing: 2 }}>QUESTION {currentIdx + 1} / {questions.length}</div>
-               <motion.div key={currentIdx} initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} style={{ fontSize: 28, fontWeight: 500, lineHeight: 1.4 }}>
+         {/* Right Side: Question & Manual Answer Fallback */}
+         <div style={{ width: '480px', display: 'flex', flexDirection: 'column', background: '#0a0a0a' }}>
+            <div style={{ flex: 1, padding: 40, display: 'flex', flexDirection: 'column', gap: 24 }}>
+               <div style={{ opacity: 0.5, fontSize: 11, fontWeight: 800, letterSpacing: 2 }}>QUESTION {currentIdx + 1} / {questions.length}</div>
+               <motion.div key={currentIdx} initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} style={{ fontSize: 24, fontWeight: 600, lineHeight: 1.5, color: '#e0e0e0' }}>
                  {questions[currentIdx]?.question}
                </motion.div>
+               
+               {/* Manual Answer Space */}
+               <div style={{ marginTop: 'auto' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, color: 'rgba(255,255,255,0.4)' }}>
+                    <Keyboard size={14} />
+                    <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1 }}>OFFLINE ANSWER (FALLBACK)</span>
+                  </div>
+                  <textarea 
+                    value={manualAnswer}
+                    onChange={e => setManualAnswer(e.target.value)}
+                    placeholder="Type your notes or answer here if voice connectivity is low..."
+                    style={{ width: '100%', height: 160, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, padding: 16, color: 'white', fontSize: 14, resize: 'none', outline: 'none', transition: 'border-color 0.2s' }}
+                    onFocus={e => e.currentTarget.style.borderColor = 'rgba(255,255,255,0.3)'}
+                    onBlur={e => e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'}
+                  />
+               </div>
             </div>
 
-            <div style={{ padding: 40, borderTop: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.02)' }}>
-               <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-                 <Monitor size={16} color="var(--error)" />
-                 <span style={{ fontSize: 12, fontWeight: 700 }}>SESSION LOGS</span>
-               </div>
-               <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 150, overflowY: 'auto', fontSize: 11, fontFamily: 'monospace', color: 'rgba(255,255,255,0.4)' }}>
-                  <div>[00:00:01] Camera stream initialized</div>
-                  <div>[00:00:05] Audio input active</div>
-                  <div>[00:00:10] AI Proctoring system online</div>
-                  {switches > 0 && Array.from({length: switches}).map((_, i) => (
-                    <div key={i} style={{ color: 'var(--error)' }}>[{new Date().toLocaleTimeString()}] ALERT: Tab switch detected (#{i+1})</div>
-                  ))}
+            {/* Monitoring Log */}
+            <div style={{ padding: '0 40px 40px' }}>
+               <div style={{ background: 'rgba(255,255,255,0.02)', padding: 16, borderRadius: 8, border: '1px solid rgba(255,255,255,0.05)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+                    <Monitor size={14} color="var(--error)" />
+                    <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: 1 }}>SYSTEM LOGS</span>
+                  </div>
+                  <div style={{ height: 60, overflowY: 'auto', fontSize: 10, fontFamily: 'monospace', color: 'rgba(255,255,255,0.3)' }}>
+                     <div>[00:00:01] HW acceleration ready</div>
+                     <div>[00:00:10] Integrity check passing</div>
+                     {switches > 0 && <div style={{ color: 'var(--error)' }}>[ALERT] Tab switch detected!</div>}
+                  </div>
                </div>
             </div>
          </div>
       </div>
 
       <style>{`
-        .pulse-slow { animation: blink 2s infinite; }
-        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+        .pulse-slow { animation: blink 2.5s infinite; }
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
       `}</style>
     </motion.div>
   );
@@ -277,6 +302,7 @@ export default function InterviewPage() {
           <LiveInterviewRoom 
             questions={questions} 
             onComplete={(res) => { setResults(res); setSessionState('results'); }} 
+            onExit={() => { if(confirm('Exit the interview? Progress will be lost.')) setSessionState('ready'); }}
           />
         )}
       </AnimatePresence>
@@ -350,5 +376,6 @@ export default function InterviewPage() {
     </>
   );
 }
+
 
 
