@@ -94,25 +94,29 @@ export default function RoadmapPage() {
     }, { onConflict: 'user_id,analysis_id,week,day,task_id' });
   };
 
-  const totalTasks = roadmap ? Object.values(roadmap).reduce((sum, w) => sum + (w.days || w.tasks || []).reduce((s, d) => s + (d.tasks || [d]).length, 0), 0) : 0;
+  const totalTasks = roadmap 
+    ? Object.values(roadmap).reduce((sum, w) => {
+        if (!w || typeof w !== 'object') return sum;
+        const subItems = Array.isArray(w.days) ? w.days : (Array.isArray(w.tasks) ? w.tasks : []);
+        return sum + subItems.reduce((s, d) => {
+          if (!d) return s;
+          const ts = Array.isArray(d.tasks) ? d.tasks : [d];
+          return s + ts.length;
+        }, 0);
+      }, 0)
+    : 0;
   const completedCount = completedTasks.size;
   const progressPct = totalTasks > 0 ? (completedCount / totalTasks * 100) : 0;
 
   const score = selectedAnalysis?.scores_json?.overall_score || 0;
 
-  if (isLocked) {
+  if (!selectedAnalysis) {
     return (
-      <motion.div initial="initial" animate="animate" style={{ maxWidth: 800, textAlign: 'center', padding: '80px 0' }}>
-        <motion.div variants={fadeUp}>
-          <Lock size={48} color="var(--text-muted)" style={{ marginBottom: 16 }} />
-          <h2 style={{ fontSize: 24, fontWeight: 700, marginBottom: 12 }}>Roadmap Locked</h2>
-          <p style={{ color: 'var(--text-secondary)', marginBottom: 24 }}>Score 85% or higher on a JD analysis to unlock your personalized learning roadmap.</p>
-          <div style={{ height: 8, borderRadius: 4, background: 'var(--border)', maxWidth: 300, margin: '0 auto', marginBottom: 8 }}>
-            <div style={{ height: '100%', borderRadius: 4, background: 'var(--error)', width: `${(score / 85) * 100}%`, transition: 'width 1s' }} />
-          </div>
-          <span style={{ fontSize: 13, color: 'var(--text-muted)' }} className="font-mono">{score}% / 85%</span>
-        </motion.div>
-      </motion.div>
+      <div style={{ maxWidth: 800, padding: '100px 0', textAlign: 'center', margin: '0 auto' }}>
+        <BookOpen size={48} color="var(--text-muted)" style={{ marginBottom: 16 }} />
+        <h2 style={{ fontSize: 24, fontWeight: 700, marginBottom: 12 }}>Roadmap Unavailable</h2>
+        <p style={{ color: 'var(--text-secondary)' }}>Please upload your resume and a job description first to generate a learning path.</p>
+      </div>
     );
   }
 
@@ -120,8 +124,8 @@ export default function RoadmapPage() {
     <motion.div initial="initial" animate="animate" style={{ maxWidth: 900 }}>
       <motion.div variants={fadeUp} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 32 }}>
         <div>
-          <h1 style={{ fontSize: 32, fontWeight: 800, marginBottom: 8 }}>Learning Roadmap</h1>
-          <p style={{ color: 'var(--text-secondary)' }}>Step-by-step path tailored to your specific JD targets.</p>
+          <h1 style={{ fontSize: 32, fontWeight: 800, marginBottom: 8 }}>{score < 85 ? 'Preparation Path' : 'Success Roadmap'}</h1>
+          <p style={{ color: 'var(--text-secondary)' }}>{score < 85 ? `Focusing on bridging your ${85-score}% gap to unlock the Interview Room.` : 'Finalizing your profile for peak technical performance.'}</p>
         </div>
         {roadmap && (
            <button onClick={generateRoadmap} className="btn-secondary" style={{ fontSize: 12, padding: '8px 16px' }}>
@@ -173,11 +177,16 @@ export default function RoadmapPage() {
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             {['week1', 'week2', 'week3', 'week4'].map((wk, wi) => {
-              const week = roadmap[wk];
-              if (!week) return null;
+              // Be flexible with keys (sometimes AI returns "week1", sometimes "Week 1")
+              const week = roadmap[wk] || roadmap[wk.charAt(0).toUpperCase() + wk.slice(1)] || roadmap[wk.replace('week', 'Week ')];
+              if (!week || typeof week !== 'object') return null;
+              
               const isExpanded = expandedWeek === wk;
-              const tasks = week.days ? week.days.flatMap(d => d.tasks || []) : week.tasks || [];
-              const weekCompleted = tasks.every(t => completedTasks.has(t.id || `${wk}-${tasks.indexOf(t)}`));
+              const tasks = Array.isArray(week.days) 
+                ? week.days.flatMap(d => (Array.isArray(d.tasks) ? d.tasks.filter(Boolean) : [])) 
+                : (Array.isArray(week.tasks) ? week.tasks.filter(Boolean) : []);
+                
+              const weekCompleted = tasks.length > 0 && tasks.every(t => completedTasks.has(t.id || `${wk}-${tasks.indexOf(t)}`));
 
               return (
                 <motion.div key={wk} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: wi * 0.1 }}
@@ -185,12 +194,12 @@ export default function RoadmapPage() {
                   <div onClick={() => setExpandedWeek(isExpanded ? null : wk)}
                     style={{ padding: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', background: isExpanded ? 'rgba(59,130,246,0.02)' : 'transparent' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                      <div style={{ width: 40, height: 40, borderRadius: 10, background: weekCompleted ? 'var(--success)' : 'var(--bg-base)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: weekCompleted ? 'white' : 'var(--text-muted)', border: '1px solid var(--border)' }}>
+                      <div style={{ width: 40, height: 40, borderRadius: 10, background: weekCompleted ? 'var(--success)' : 'var(--bg-elevated)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: weekCompleted ? 'white' : 'var(--text-muted)', border: '1px solid var(--border)' }}>
                         {weekCompleted ? <CheckCircle size={20} /> : <span style={{ fontWeight: 800 }}>{wi + 1}</span>}
                       </div>
                       <div>
                         <div style={{ fontWeight: 800, fontSize: 16 }}>Week {wi + 1}</div>
-                        <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{week.theme || week.goal}</div>
+                        <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{week.theme || week.goal || 'Ongoing Training'}</div>
                       </div>
                     </div>
                     <ChevronRight size={18} style={{ transform: isExpanded ? 'rotate(90deg)' : 'none', transition: 'all 0.3s', color: 'var(--text-muted)' }} />
@@ -200,7 +209,7 @@ export default function RoadmapPage() {
                     {isExpanded && (
                       <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}>
                         <div style={{ padding: '0 24px 24px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-                          {tasks.map((t, ti) => {
+                          {tasks.length > 0 ? tasks.map((t, ti) => {
                             const tid = t.id || `${wk}-${ti}`;
                             const done = completedTasks.has(tid);
                             return (
@@ -211,13 +220,17 @@ export default function RoadmapPage() {
                                   {done ? <CheckCircle size={20} /> : <Circle size={20} />}
                                 </div>
                                 <div style={{ flex: 1 }}>
-                                  <div style={{ fontSize: 14, fontWeight: 600, textDecoration: done ? 'line-through' : 'none' }}>{t.title || t.task}</div>
+                                  <div style={{ fontSize: 14, fontWeight: 600, textDecoration: done ? 'line-through' : 'none' }}>{t.title || t.task || 'Study session'}</div>
                                   {t.type && <span style={{ fontSize: 10, textTransform: 'uppercase', color: 'var(--accent)', fontWeight: 700 }}>{t.type}</span>}
                                 </div>
                                 {t.duration_mins && <span style={{ fontSize: 11, color: 'var(--text-muted)', background: 'var(--bg-elevated)', padding: '2px 8px', borderRadius: 4 }}>{t.duration_mins}m</span>}
                               </div>
                             );
-                          })}
+                          }) : (
+                            <div style={{ textAlign: 'center', padding: '20px', color: 'var(--text-muted)', fontSize: 13 }}>
+                              Generating detailed tasks for this week...
+                            </div>
+                          )}
                         </div>
                       </motion.div>
                     )}
