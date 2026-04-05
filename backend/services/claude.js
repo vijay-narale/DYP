@@ -1,7 +1,7 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
-const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || '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';
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 const API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
 const FREE_MODELS = [
