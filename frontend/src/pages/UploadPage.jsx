@@ -147,7 +147,10 @@ export default function UploadPage() {
               <CheckCircle size={18} color="var(--success)" /> Parsed Resume
             </h3>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
-              {(parsed.skills || []).map(s => <span key={s} className="badge badge-accent">{s}</span>)}
+              {(Array.isArray(parsed.skills) ? parsed.skills : (typeof parsed.skills === 'string' ? parsed.skills.split(',') : [])).map((s, i) => {
+                const text = typeof s === 'string' ? s : (s && typeof s === 'object' ? (s.name || s.skill || s.title || Object.values(s)[0]) : String(s));
+                return <span key={i} className="badge badge-accent">{String(text).trim()}</span>;
+              })}
             </div>
             <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
               {parsed.experience?.length || 0} experiences • {parsed.projects?.length || 0} projects • {parsed.certifications?.length || 0} certifications
