@@ -75,11 +75,6 @@ export default function Navbar() {
             {label}
           </NavLink>
         ))}
-        {profile?.role === 'admin' && (
-          <NavLink to="/admin" style={({ isActive }) => linkStyle(isActive)}>
-            Admin Panel
-          </NavLink>
-        )}
       </div>
 
       {/* Auth Section */}

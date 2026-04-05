@@ -16,8 +16,6 @@ const AnalyzePage = lazy(() => import('./pages/AnalyzePage'));
 const RoadmapPage = lazy(() => import('./pages/RoadmapPage'));
 const InterviewPage = lazy(() => import('./pages/InterviewPage'));
 const ProfilePage = lazy(() => import('./pages/ProfilePage'));
-const AdminPanelPage = lazy(() => import('./pages/AdminPanelPage'));
-const LiveInterviewSession = lazy(() => import('./pages/LiveInterviewSession'));
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 5 * 60 * 1000, retry: 1 } }
@@ -75,8 +73,6 @@ function App() {
                   <Route path="/analyze" element={<AnalyzePage />} />
                   <Route path="/roadmap" element={<RoadmapPage />} />
                   <Route path="/interview" element={<InterviewPage />} />
-                  <Route path="/interview/live/:id" element={<LiveInterviewSession />} />
-                  <Route path="/admin" element={<AdminPanelPage />} />
                   <Route path="/profile" element={<ProfilePage />} />
                 </Route>
               </Route>

@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Lock, Mic, RotateCcw, ChevronLeft, ChevronRight, AlertTriangle, Video, ShieldAlert, Play, Monitor, User as UserIcon, Activity, Eye, Zap, XCircle, Keyboard, MessageSquare, Brain, CheckCircle2, Download, Timer } from 'lucide-react';
 import { supabase } from '../lib/supabase';
@@ -383,7 +382,6 @@ function FlipCard({ question, index }) {
 
 export default function InterviewPage() {
   const { user } = useAuth();
-  const navigate = useNavigate();
   const [mode, setMode] = useState('live'); 
   const [selectedAnalysis, setSelectedAnalysis] = useState(null);
   const [questions, setQuestions] = useState([]);
@@ -475,46 +473,18 @@ export default function InterviewPage() {
         ) : sessionState === 'ready' ? (
           <div style={{ display: 'grid', gridTemplateColumns: mode === 'live' ? '1fr' : 'repeat(2, 1fr)', gap: 24 }}>
              {mode === 'live' ? (
-               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 24 }}>
-                  {/* AI Practice Option */}
-                  <div className="card-static" style={{ padding: 40, textAlign: 'center', background: 'var(--bg-elevated)', border: '1px solid var(--accent)' }}>
-                     <Brain size={48} color="var(--accent)" style={{ marginBottom: 20 }} />
-                     <h2 style={{ fontSize: 20, fontWeight: 800, marginBottom: 12 }}>AI Practice Session</h2>
-                     <p style={{ color: 'var(--text-secondary)', marginBottom: 32, fontSize: 13 }}>
-                       1:1 Mock Interview with our advanced AI Agent. Real-time feedback, proctoring enabled.
-                     </p>
-                     <button onClick={() => setSessionState('active')} className="btn-primary" style={{ width: '100%', padding: '14px' }}>
-                       START AI SESSION
-                     </button>
-                  </div>
-
-                  {/* Live Person Option */}
-                  <div className="card-static" style={{ padding: 40, textAlign: 'center', background: 'var(--bg-elevated)', border: '1px solid var(--success)' }}>
-                     <UserIcon size={48} color="var(--success)" style={{ marginBottom: 20 }} />
-                     <h2 style={{ fontSize: 20, fontWeight: 800, marginBottom: 12 }}>Live Expert Session</h2>
-                     <p style={{ color: 'var(--text-secondary)', marginBottom: 32, fontSize: 13 }}>
-                       Request a live interview with a human expert/admin. Real-time marking and mentorship.
-                     </p>
-                     <button 
-                       onClick={async () => {
-                         setLoading(true);
-                         const { data, error } = await supabase.from('live_interviews').insert([{
-                           user_id: user.id,
-                           analysis_id: selectedAnalysis.id,
-                           status: 'pending'
-                         }]).select().single();
-                         setLoading(false);
-                         if (error) toast.error(error.message);
-                         else {
-                           toast.success('Interview request sent! Waiting for admin...');
-                           navigate(`/interview/live/${data.id}`);
-                         }
-                       }} 
-                       className="btn-primary" 
-                       style={{ width: '100%', padding: '14px', background: 'var(--success)', border: 'none' }}
-                     >
-                       REQUEST LIVE SESSION
-                     </button>
+               <div className="card-static" style={{ padding: 60, textAlign: 'center', background: 'var(--bg-elevated)', border: '1px solid var(--accent)' }}>
+                  <ShieldAlert size={48} color="var(--error)" style={{ marginBottom: 20 }} />
+                  <h2 style={{ fontSize: 24, fontWeight: 800, marginBottom: 12 }}>Security Protocol Active</h2>
+                  <p style={{ color: 'var(--text-secondary)', marginBottom: 32, maxWidth: 500, margin: '0 auto 32px' }}>
+                    This session includes 1:1 camera monitoring, tab-switch detection, and AI focus tracking. 
+                    Ensure you are in a quiet, well-lit environment.
+                  </p>
+                  <div style={{ display: 'flex', gap: 16, justifyContent: 'center' }}>
+                    <button onClick={() => setSessionState('active')} className="btn-primary" style={{ padding: '16px 40px', fontSize: 16, background: 'var(--error)', border: 'none', color: 'white' }}>
+                      START SESSION
+                    </button>
+                    <button onClick={generateInterview} className="btn-secondary">Regenerate</button>
                   </div>
                </div>
              ) : (
