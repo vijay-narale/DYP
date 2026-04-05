@@ -56,4 +56,18 @@ router.post('/mock-interview', verifyAuth, async (req, res) => {
   }
 });
 
+import { evaluateInterviewAnswer } from '../services/claude.js';
+
+// Evaluate a single answer
+router.post('/evaluate', verifyAuth, async (req, res) => {
+  const { question, answer, jdText } = req.body;
+  if (!question || !answer) return res.status(400).json({ error: 'question and answer required' });
+  try {
+    const feedback = await evaluateInterviewAnswer(question, answer, jdText);
+    res.json(feedback);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;

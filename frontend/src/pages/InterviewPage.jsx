@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Lock, Mic, RotateCcw, ChevronLeft, ChevronRight, AlertTriangle, Video, ShieldAlert, Play, Monitor, User as UserIcon, Activity, Eye, Zap, XCircle, Keyboard } from 'lucide-react';
+import { Lock, Mic, RotateCcw, ChevronLeft, ChevronRight, AlertTriangle, Video, ShieldAlert, Play, Monitor, User as UserIcon, Activity, Eye, Zap, XCircle, Keyboard, MessageSquare, Brain, CheckCircle2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import api, { streamFetch } from '../lib/api';
@@ -8,26 +8,79 @@ import toast from 'react-hot-toast';
 
 const fadeUp = { initial: { opacity: 0, y: 20 }, animate: { opacity: 1, y: 0 } };
 
-function LiveInterviewRoom({ questions, onComplete, onExit }) {
+function LiveInterviewRoom({ questions, onComplete, onExit, jdText }) {
   const [currentIdx, setCurrentIdx] = useState(0);
   const [timeLeft, setTimeLeft] = useState(120); 
   const [switches, setSwitches] = useState(0);
   const [focusLevel, setFocusLevel] = useState(100);
   const [manualAnswer, setManualAnswer] = useState('');
+  const [isListening, setIsListening] = useState(false);
+  const [transcript, setTranscript] = useState('');
+  const [isEvaluating, setIsEvaluating] = useState(false);
+  const [lastFeedback, setLastFeedback] = useState(null);
+  const [silenceCounter, setSilenceCounter] = useState(0);
+  
   const videoRef = useRef(null);
   const streamRef = useRef(null);
+  const recognitionRef = useRef(null);
 
   // Natural Voice Selection
   const speakText = useCallback((text) => {
     window.speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(text);
     const voices = window.speechSynthesis.getVoices();
-    // Try to find a premium/natural sounding voice
-    u.voice = voices.find(v => (v.name.includes('Google') || v.name.includes('Premium') || v.name.includes('Natural')) && v.lang.startsWith('en')) || voices[0];
-    u.rate = 0.95; // Slightly slower than 1.0 for clarity
-    u.pitch = 0.9; // Slightly lower pitch sounding more adult/natural
+    u.voice = voices.find(v => (v.name.includes('Google') || v.name.includes('Premium')) && v.lang.startsWith('en')) || voices[0];
+    u.rate = 0.95;
+    u.pitch = 0.9;
     window.speechSynthesis.speak(u);
   }, []);
+
+  // Speech Recognition Setup
+  useEffect(() => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SpeechRecognition) {
+      const recognition = new SpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = 'en-US';
+
+      recognition.onresult = (event) => {
+        let interim = '';
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          if (event.results[i].isFinal) setTranscript(prev => prev + event.results[i][0].transcript + ' ');
+          else interim += event.results[i][0].transcript;
+        }
+        setSilenceCounter(0); // Reset silence on speech
+      };
+
+      recognition.onend = () => { if (isListening) recognition.start(); };
+      recognitionRef.current = recognition;
+    }
+  }, [isListening]);
+
+  const toggleListening = () => {
+    if (isListening) {
+      recognitionRef.current?.stop();
+      setIsListening(false);
+    } else {
+      setTranscript('');
+      recognitionRef.current?.start();
+      setIsListening(true);
+    }
+  };
+
+  // Silence Monitor
+  useEffect(() => {
+    if (isListening) {
+      const timer = setInterval(() => {
+        setSilenceCounter(c => {
+          if (c > 10) toast.error("Silence detected. Please answer the question!", { id: 'silence-warn' });
+          return c + 1;
+        });
+      }, 1000);
+      return () => clearInterval(timer);
+    }
+  }, [isListening]);
 
   // Focus simulation
   useEffect(() => {
@@ -40,15 +93,12 @@ function LiveInterviewRoom({ questions, onComplete, onExit }) {
     return () => clearInterval(interval);
   }, []);
 
-  // Screen Switch Detection
+  // Screen Switch
   useEffect(() => {
     const handleVisibility = () => {
       if (document.hidden) {
         setSwitches(s => s + 1);
-        toast.error('SCREEN SWITCH DETECTED!', {
-          icon: '⚠️',
-          style: { background: '#ef4444', color: '#fff', fontWeight: 'bold' }
-        });
+        toast.error('SCREEN SWITCH DETECTED!');
       }
     };
     document.addEventListener('visibilitychange', handleVisibility);
@@ -56,47 +106,61 @@ function LiveInterviewRoom({ questions, onComplete, onExit }) {
   }, []);
 
   useEffect(() => {
-    if (timeLeft <= 0) {
-      handleNext();
-      return;
-    }
-    const t = setInterval(() => setTimeLeft(l => l - 1), 1000);
-    return () => clearInterval(t);
-  }, [timeLeft, currentIdx]);
-
-  useEffect(() => {
-    // Immediate camera start
     const startCamera = async () => {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
         streamRef.current = stream;
         if (videoRef.current) videoRef.current.srcObject = stream;
-      } catch (err) {
-        console.error(err);
-        toast.error("Camera access failed.");
-      }
+      } catch (err) { toast.error("Camera access failed."); }
     };
     startCamera();
-
     return () => {
       if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
+      recognitionRef.current?.stop();
       window.speechSynthesis.cancel();
     };
   }, []);
 
   useEffect(() => {
     if (questions[currentIdx]) {
-      speakText(`Next question. ${questions[currentIdx].question}`);
+      speakText(`Question ${currentIdx + 1}: ${questions[currentIdx].question}`);
+      setTranscript('');
+      setManualAnswer('');
+      setLastFeedback(null);
     }
   }, [currentIdx, questions, speakText]);
 
-  const handleNext = () => {
-    setManualAnswer(''); // Clear for next
-    if (currentIdx < questions.length - 1) {
+  const handleEvaluateAndNext = async () => {
+    const finalAnswer = (transcript + ' ' + manualAnswer).trim();
+    if (!finalAnswer) {
+      toast.error("Please provide an answer before continuing.");
+      return;
+    }
+
+    setIsEvaluating(true);
+    try {
+      const { data: feedback } = await api.post('/interview/evaluate', {
+        question: questions[currentIdx].question,
+        answer: finalAnswer,
+        jdText: jdText
+      });
+      setLastFeedback(feedback);
+      speakText(feedback.ai_verdict === 'Hireable' ? "Great answer. Let's move on." : "Interesting. Consider the feedback provided.");
+      
+      // Delay so they can see feedback
+      setTimeout(() => {
+        if (currentIdx < questions.length - 1) {
+          setCurrentIdx(i => i + 1);
+          setTimeLeft(120);
+          setIsEvaluating(false);
+        } else {
+          onComplete({ switches, focusLevel, transcript });
+        }
+      }, 4000);
+    } catch (err) {
+      toast.error("AI Evaluation failed. Skipping...");
       setCurrentIdx(i => i + 1);
-      setTimeLeft(120);
-    } else {
-      onComplete({ switches, focusLevel });
+      setIsEvaluating(false);
     }
   };
 
@@ -105,99 +169,154 @@ function LiveInterviewRoom({ questions, onComplete, onExit }) {
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       style={{ position: 'fixed', inset: 0, background: '#050505', zIndex: 9999, display: 'flex', flexDirection: 'column', color: 'white' }}
     >
-      {/* HUD Header */}
+      {/* Header HUD */}
       <div style={{ padding: '16px 32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.02)', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
           <div style={{ background: 'var(--error)', padding: '4px 12px', borderRadius: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
             <Activity size={14} className="pulse-slow" />
-            <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: 1 }}>PROCTORING ACTIVE</span>
+            <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: 1 }}>AI BIOMETRIC AGENT ACTIVE</span>
           </div>
-          <button onClick={onExit} style={{ background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.6)', border: 'none', display: 'flex', alignItems: 'center', gap: 8, padding: '6px 14px', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-             <XCircle size={16} /> EXIT INTERVIEW
+          <button onClick={onExit} style={{ background: 'rgba(255,255,255,0.05)', color: 'white', border: 'none', display: 'flex', alignItems: 'center', gap: 8, padding: '6px 14px', borderRadius: 6, fontSize: 13, cursor: 'pointer' }}>
+             <XCircle size={16} /> EXIT
           </button>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 40 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 32 }}>
            <div style={{ textAlign: 'right' }}>
-              <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', letterSpacing: 1 }}>TIME REMAINING</div>
-              <div style={{ fontSize: 24, fontFamily: 'monospace', color: timeLeft < 30 ? 'var(--error)' : 'white' }}>
-                {Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, '0')}
-              </div>
+              <div style={{ fontSize: 10, opacity: 0.5 }}>INTEGRITY</div>
+              <div style={{ fontSize: 18, fontFamily: 'monospace', color: switches > 0 ? 'var(--error)' : 'var(--success)' }}>{(100 - (switches*20)).toFixed(0)}%</div>
            </div>
-           <button onClick={handleNext} style={{ background: 'white', color: 'black', border: 'none', padding: '12px 28px', borderRadius: 6, fontWeight: 700, cursor: 'pointer', transition: 'transform 0.15s' }} onMouseDown={e => e.currentTarget.style.transform = 'scale(0.95)'} onMouseUp={e => e.currentTarget.style.transform = 'scale(1)'}>
-             {currentIdx === questions.length - 1 ? 'TERMINATE' : 'SAVE & NEXT →'}
+           <div style={{ width: 1, height: 30, background: 'rgba(255,255,255,0.1)' }} />
+           <div style={{ textAlign: 'right' }}>
+              <div style={{ fontSize: 10, opacity: 0.5 }}>TIMER</div>
+              <div style={{ fontSize: 22, fontFamily: 'monospace' }}>{Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, '0')}</div>
+           </div>
+           <button onClick={handleEvaluateAndNext} disabled={isEvaluating} style={{ background: isEvaluating ? 'var(--border)' : 'white', color: 'black', border: 'none', padding: '12px 28px', borderRadius: 6, fontWeight: 800, cursor: 'pointer' }}>
+             {isEvaluating ? 'AI ANALYZING...' : 'SUBMIT ANSWER →'}
            </button>
         </div>
       </div>
 
       <div style={{ flex: 1, display: 'flex' }}>
-         {/* Left Side: Camera & AI Face Detection Overlay */}
+         {/* Left Side: Proctoring HUD */}
          <div style={{ flex: 1, position: 'relative', borderRight: '1px solid rgba(255,255,255,0.1)' }}>
             <video ref={videoRef} autoPlay muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover', transform: 'scaleX(-1)' }} />
             
-            <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', padding: 40, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+            {/* Visual Intelligence Overlays */}
+            <div style={{ position: 'absolute', inset: 0, padding: 40, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', pointerEvents: 'none' }}>
                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <div style={{ width: 40, height: 40, borderLeft: '2px solid var(--error)', borderTop: '2px solid var(--error)' }} />
-                  <div style={{ width: 40, height: 40, borderRight: '2px solid var(--error)', borderTop: '2px solid var(--error)' }} />
+                  <div style={{ padding: 12, borderRadius: 8, background: 'rgba(0,0,0,0.6)', border: '1px solid rgba(255,255,255,0.1)' }}>
+                    <div style={{ fontSize: 9, opacity: 0.5, marginBottom: 4 }}>HEAD MOV.</div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--success)' }}>RECENTERED</div>
+                  </div>
+                  <div style={{ padding: 12, borderRadius: 8, background: 'rgba(0,0,0,0.6)', border: '1px solid rgba(255,255,255,0.1)' }}>
+                    <div style={{ fontSize: 9, opacity: 0.5, marginBottom: 4 }}>RETINA DET.</div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--success)' }}>FOCUSED</div>
+                  </div>
                </div>
-               <div style={{ alignSelf: 'center', width: 220, height: 220, border: '1px dashed rgba(239,68,68,0.3)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <div style={{ width: 6, height: 6, background: 'var(--error)', borderRadius: '50%', opacity: 0.6 }} />
+
+               <div style={{ alignSelf: 'center', width: 250, height: 250, border: '1px solid rgba(239,68,68,0.2)', borderRadius: '50%', position: 'relative' }}>
+                  <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: 10, height: 10, background: 'var(--error)', borderRadius: '50%', boxShadow: '0 0 20px var(--error)' }} />
+                  <div className="scanner-line" style={{ position: 'absolute', width: '100%', height: 2, background: 'rgba(239,68,68,0.4)', top: '50%', animation: 'scan 4s linear infinite' }} />
                </div>
+
                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-                  <div style={{ width: 40, height: 40, borderLeft: '2px solid var(--error)', borderBottom: '2px solid var(--error)' }} />
-                  <div style={{ background: 'rgba(0,0,0,0.85)', padding: 18, borderRadius: 10, border: '1px solid rgba(255,255,255,0.15)', width: 220, backdropFilter: 'blur(10px)' }}>
-                    <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.5)', marginBottom: 10, fontWeight: 800, letterSpacing: 1 }}>AI BIOMETRIC DATA</div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 6 }}>
-                      <span>RETINA LOCK</span>
-                      <span style={{ color: 'var(--success)' }}>TRACKED</span>
+                  <div style={{ background: 'rgba(0,0,0,0.8)', padding: 16, borderRadius: 12, border: '1px solid rgba(255,255,255,0.1)', width: 220 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                      <Zap size={14} color="var(--error)" />
+                      <span style={{ fontSize: 10, fontWeight: 800 }}>LIVE PROCTOR STATS</span>
                     </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
-                      <span>ATTENTION</span>
-                      <span style={{ color: focusLevel > 90 ? 'var(--success)' : 'var(--warning)' }}>{focusLevel.toFixed(1)}%</span>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
+                        <span style={{ opacity: 0.6 }}>Eye Gaze</span>
+                        <span style={{ color: 'var(--success)' }}>STABLE</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
+                        <span style={{ opacity: 0.6 }}>Face Detect</span>
+                        <span style={{ color: focusLevel > 90 ? 'var(--success)' : 'var(--warning)' }}>{focusLevel.toFixed(1)}%</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
+                        <span style={{ opacity: 0.6 }}>Silence</span>
+                        <span style={{ color: silenceCounter > 10 ? 'var(--error)' : 'white' }}>{silenceCounter}s</span>
+                      </div>
                     </div>
                   </div>
-                  <div style={{ width: 40, height: 40, borderRight: '2px solid var(--error)', borderBottom: '2px solid var(--error)' }} />
+
+                  {/* AI Agent Feedback Bubble */}
+                  <AnimatePresence>
+                    {lastFeedback && (
+                      <motion.div initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}
+                        style={{ background: 'var(--bg-elevated)', border: '1px solid var(--accent)', padding: 20, borderRadius: '20px 20px 0 20px', maxWidth: 300, backdropFilter: 'blur(20px)', boxShadow: '0 10px 40px rgba(0,0,0,0.4)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, color: 'var(--accent)' }}>
+                          <CheckCircle2 size={16} />
+                          <span style={{ fontSize: 11, fontWeight: 800 }}>AI AGENT FEEDBACK</span>
+                        </div>
+                        <div style={{ fontSize: 13, lineHeight: 1.5, color: '#e0e0e0' }}>{lastFeedback.feedback.slice(0, 120)}...</div>
+                        <div style={{ marginTop: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontSize: 20, fontWeight: 800, color: 'var(--success)' }}>{lastFeedback.score}%</span>
+                          <span className="badge" style={{ fontSize: 10, background: 'rgba(255,255,255,0.05)' }}>{lastFeedback.ai_verdict}</span>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                </div>
             </div>
          </div>
 
-         {/* Right Side: Question & Manual Answer Fallback */}
-         <div style={{ width: '480px', display: 'flex', flexDirection: 'column', background: '#0a0a0a' }}>
-            <div style={{ flex: 1, padding: 40, display: 'flex', flexDirection: 'column', gap: 24 }}>
-               <div style={{ opacity: 0.5, fontSize: 11, fontWeight: 800, letterSpacing: 2 }}>QUESTION {currentIdx + 1} / {questions.length}</div>
-               <motion.div key={currentIdx} initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} style={{ fontSize: 24, fontWeight: 600, lineHeight: 1.5, color: '#e0e0e0' }}>
-                 {questions[currentIdx]?.question}
-               </motion.div>
-               
-               {/* Manual Answer Space */}
-               <div style={{ marginTop: 'auto' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, color: 'rgba(255,255,255,0.4)' }}>
-                    <Keyboard size={14} />
-                    <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1 }}>OFFLINE ANSWER (FALLBACK)</span>
+         {/* Right Side: Answer Input */}
+         <div style={{ width: '500px', display: 'flex', flexDirection: 'column', background: '#0a0a0a' }}>
+            <div style={{ flex: 1, padding: 40, display: 'flex', flexDirection: 'column', gap: 32 }}>
+               <div>
+                 <div style={{ fontSize: 11, opacity: 0.5, fontWeight: 800, marginBottom: 12, letterSpacing: 2 }}>QUESTION {currentIdx + 1}</div>
+                 <div style={{ fontSize: 26, fontWeight: 500, lineHeight: 1.4 }}>{questions[currentIdx]?.question}</div>
+               </div>
+
+               {/* Voice Capture */}
+               <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: 16, padding: 24 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <div style={{ width: 8, height: 8, borderRadius: '50%', background: isListening ? 'var(--error)' : 'rgba(255,255,255,0.2)', animation: isListening ? 'blink 1s infinite' : 'none' }} />
+                      <span style={{ fontSize: 12, fontWeight: 700 }}>AI VOICE CAPTURE</span>
+                    </div>
+                    <button onClick={toggleListening} style={{ background: isListening ? 'var(--error)' : 'rgba(255,255,255,0.1)', border: 'none', color: 'white', padding: '8px 16px', borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
+                      {isListening ? 'STOP RECORDING' : 'ENABLE MIC'}
+                    </button>
+                  </div>
+                  <div style={{ height: 120, overflowY: 'auto', fontSize: 15, color: transcript ? 'white' : 'rgba(255,255,255,0.3)', lineHeight: 1.6, fontStyle: transcript ? 'normal' : 'italic' }}>
+                    {transcript || "The AI is listening for your response. Speak naturally..."}
+                  </div>
+               </div>
+
+               {/* Manual Fallback */}
+               <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                    <Keyboard size={14} style={{ opacity: 0.5 }} />
+                    <span style={{ fontSize: 11, fontWeight: 800, opacity: 0.5 }}>ADDITIONAL NOTES OR MANUAL ANSWER</span>
                   </div>
                   <textarea 
-                    value={manualAnswer}
-                    onChange={e => setManualAnswer(e.target.value)}
-                    placeholder="Type your notes or answer here if voice connectivity is low..."
-                    style={{ width: '100%', height: 160, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, padding: 16, color: 'white', fontSize: 14, resize: 'none', outline: 'none', transition: 'border-color 0.2s' }}
-                    onFocus={e => e.currentTarget.style.borderColor = 'rgba(255,255,255,0.3)'}
-                    onBlur={e => e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'}
+                    value={manualAnswer} onChange={e => setManualAnswer(e.target.value)}
+                    placeholder="Type details here if voice capture missed anything..."
+                    style={{ width: '100%', height: 120, background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: 12, padding: 16, color: 'white', fontSize: 14, resize: 'none', outline: 'none' }}
                   />
                </div>
             </div>
 
-            {/* Monitoring Log */}
-            <div style={{ padding: '0 40px 40px' }}>
-               <div style={{ background: 'rgba(255,255,255,0.02)', padding: 16, borderRadius: 8, border: '1px solid rgba(255,255,255,0.05)' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-                    <Monitor size={14} color="var(--error)" />
-                    <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: 1 }}>SYSTEM LOGS</span>
-                  </div>
-                  <div style={{ height: 60, overflowY: 'auto', fontSize: 10, fontFamily: 'monospace', color: 'rgba(255,255,255,0.3)' }}>
-                     <div>[00:00:01] HW acceleration ready</div>
-                     <div>[00:00:10] Integrity check passing</div>
-                     {switches > 0 && <div style={{ color: 'var(--error)' }}>[ALERT] Tab switch detected!</div>}
-                  </div>
+            <div style={{ padding: 40, borderTop: '1px solid rgba(255,255,255,0.1)' }}>
+               <div style={{ display: 'flex', gap: 20 }}>
+                 <div className="card-static" style={{ flex: 1, padding: 16, display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <Brain size={20} color="var(--accent)" />
+                    <div>
+                      <div style={{ fontSize: 10, opacity: 0.5 }}>AI ANALYZER</div>
+                      <div style={{ fontSize: 12, fontWeight: 700 }}>GPT-4 READY</div>
+                    </div>
+                 </div>
+                 <div className="card-static" style={{ flex: 1, padding: 16, display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <Mic size={20} color="var(--error)" />
+                    <div>
+                      <div style={{ fontSize: 10, opacity: 0.5 }}>VOICE ENGINE</div>
+                      <div style={{ fontSize: 12, fontWeight: 700 }}>WHISPER V3</div>
+                    </div>
+                 </div>
                </div>
             </div>
          </div>
@@ -301,6 +420,7 @@ export default function InterviewPage() {
         {sessionState === 'active' && (
           <LiveInterviewRoom 
             questions={questions} 
+            jdText={selectedAnalysis?.jd_text || ''}
             onComplete={(res) => { setResults(res); setSessionState('results'); }} 
             onExit={() => { if(confirm('Exit the interview? Progress will be lost.')) setSessionState('ready'); }}
           />

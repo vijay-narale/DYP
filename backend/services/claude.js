@@ -101,3 +101,14 @@ export async function generateInterviewQuestions(weakAreas, jdText) {
 Weak: ${JSON.stringify(weakAreas)} JD: ${jdText}`;
   return extractJSON(await callLLM(prompt), 'array');
 }
+
+export async function evaluateInterviewAnswer(question, answer, jdText) {
+  const prompt = `You are a technical interviewer. Evaluate this candidate's answer. Return ONLY valid JSON (no markdown):
+  {"score":<0-100>,"feedback":"","is_correct":<boolean>,"strong_points":[],"missed_points":[],"model_answer_snippet":"","improvement_tips":[],"ai_verdict":"Hireable|Borderline|Needs_Improvement"}
+
+  Question: ${question}
+  User Answer: ${answer}
+  Context: ${jdText}`;
+  return extractJSON(await callLLM(prompt, 1024));
+}
+
