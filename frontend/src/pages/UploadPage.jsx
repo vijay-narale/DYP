@@ -50,7 +50,7 @@ export default function UploadPage() {
       // Parse via backend
       const formData = new FormData();
       formData.append('resume', file);
-      const res = await api.post('/parse-resume', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+      const res = await api.post('/parse-resume', formData);
       setProgress(80);
 
       const parsedJSON = res.data.parsed;
