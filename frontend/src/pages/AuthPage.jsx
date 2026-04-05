@@ -11,8 +11,7 @@ export default function AuthPage() {
   const { login, signup } = useAuth();
   const navigate = useNavigate();
 
-  const [form, setForm] = useState({ email: '', password: '', fullName: '', confirmPassword: '', branch: '', year: '' });
-
+  const [form, setForm] = useState({ email: '', password: '', fullName: '', confirmPassword: '', branch: '', year: '', role: 'user' });
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -27,7 +26,7 @@ export default function AuthPage() {
           setLoading(false);
           return;
         }
-        await signup(form.email, form.password, form.fullName);
+        await signup(form.email, form.password, form.fullName, form.role);
         toast.success('Account created! Check your email to confirm.');
       }
     } catch (err) {
@@ -154,6 +153,51 @@ export default function AuthPage() {
                   </select>
                 </div>
               </>
+            )}
+
+            {/* Role selection (Register only) */}
+            {!isLogin && (
+              <div>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>Sign up as</label>
+                <div style={{ display: 'flex', gap: 12 }}>
+                  <button
+                    type="button"
+                    onClick={() => update('role', 'user')}
+                    style={{
+                      flex: 1,
+                      padding: '10px',
+                      borderRadius: '8px',
+                      border: `1px solid ${form.role === 'user' ? 'var(--accent)' : 'var(--border)'}`,
+                      background: form.role === 'user' ? 'var(--accent-light)' : 'transparent',
+                      color: form.role === 'user' ? 'var(--accent)' : 'var(--text-secondary)',
+                      fontSize: '14px',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      transition: '0.2s',
+                    }}
+                  >
+                    🚀 User
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => update('role', 'admin')}
+                    style={{
+                      flex: 1,
+                      padding: '10px',
+                      borderRadius: '8px',
+                      border: `1px solid ${form.role === 'admin' ? 'var(--accent)' : 'var(--border)'}`,
+                      background: form.role === 'admin' ? 'var(--accent-light)' : 'transparent',
+                      color: form.role === 'admin' ? 'var(--accent)' : 'var(--text-secondary)',
+                      fontSize: '14px',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      transition: '0.2s',
+                    }}
+                  >
+                    🛡️ Admin
+                  </button>
+                </div>
+              </div>
             )}
 
             <button

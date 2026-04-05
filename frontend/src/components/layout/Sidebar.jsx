@@ -1,20 +1,26 @@
 import React from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { LayoutDashboard, Upload, GitCompareArrows, Map, Mic, User, LogOut } from 'lucide-react';
+import { LayoutDashboard, Upload, GitCompareArrows, Map, Mic, User, LogOut, Shield } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
-
-const navItems = [
-  { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
-  { to: '/upload', icon: Upload, label: 'Upload Resume' },
-  { to: '/analyze', icon: GitCompareArrows, label: 'Analyze' },
-  { to: '/roadmap', icon: Map, label: 'Roadmap' },
-  { to: '/interview', icon: Mic, label: 'Mock Interview' },
-  { to: '/profile', icon: User, label: 'Profile' },
-];
+import { useAuth } from '../../contexts/AuthContext';
 
 export default function Sidebar() {
+  const { profile } = useAuth();
   const navigate = useNavigate();
+
+  const navItems = [
+    { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+    { to: '/upload', icon: Upload, label: 'Upload Resume' },
+    { to: '/analyze', icon: GitCompareArrows, label: 'Analyze' },
+    { to: '/roadmap', icon: Map, label: 'Roadmap' },
+    { to: '/interview', icon: Mic, label: 'Mock Interview' },
+    { to: '/profile', icon: User, label: 'Profile' },
+  ];
+
+  if (profile?.role === 'admin') {
+    navItems.push({ to: '/admin', icon: Shield, label: 'Admin Panel' });
+  }
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
