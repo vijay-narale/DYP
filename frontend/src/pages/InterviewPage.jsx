@@ -1,12 +1,126 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Lock, Mic, RotateCcw, ChevronLeft, ChevronRight, AlertTriangle } from 'lucide-react';
+import { Lock, Mic, RotateCcw, ChevronLeft, ChevronRight, AlertTriangle, Video, ShieldAlert, Play } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import api, { streamFetch } from '../lib/api';
 import toast from 'react-hot-toast';
 
 const fadeUp = { initial: { opacity: 0, y: 20 }, animate: { opacity: 1, y: 0 } };
+
+function StrictInterviewRoom({ questions, onComplete }) {
+  const [currentIdx, setCurrentIdx] = useState(0);
+  const [timeLeft, setTimeLeft] = useState(120); // 2 minutes per question
+  const videoRef = useRef(null);
+  const streamRef = useRef(null);
+
+  useEffect(() => {
+    if (timeLeft <= 0) {
+      handleNext();
+      return;
+    }
+    const t = setInterval(() => setTimeLeft(l => l - 1), 1000);
+    return () => clearInterval(t);
+  }, [timeLeft, currentIdx]); // Need currentIdx in dep to avoid stale closures if handleNext is called
+
+  useEffect(() => {
+    navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+      .then(stream => {
+        streamRef.current = stream;
+        if (videoRef.current) videoRef.current.srcObject = stream;
+      })
+      .catch(err => {
+        console.error(err);
+        toast.error("Camera access is required for a realistic interview!");
+      });
+
+    return () => {
+      if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
+      window.speechSynthesis.cancel();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (questions[currentIdx]) {
+      window.speechSynthesis.cancel();
+      const text = `Question ${currentIdx + 1}. ${questions[currentIdx].question}. You have two minutes.`;
+      const u = new SpeechSynthesisUtterance(text);
+      u.rate = 0.9;
+      u.pitch = 0.5;
+      const voices = window.speechSynthesis.getVoices();
+      u.voice = voices.find(v => v.name.includes('Google UK English Male') || v.name.includes('Male')) || voices[0];
+      window.speechSynthesis.speak(u);
+    }
+  }, [currentIdx, questions]);
+
+  const handleNext = () => {
+    if (currentIdx < questions.length - 1) {
+      setCurrentIdx(i => i + 1);
+      setTimeLeft(120);
+    } else {
+      window.speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance("Interview terminated. You may now review your performance.");
+      window.speechSynthesis.speak(u);
+      
+      if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
+      onComplete();
+    }
+  };
+
+  const timerColor = timeLeft < 30 ? 'var(--error)' : (timeLeft < 60 ? '#f59e0b' : 'white');
+
+  return (
+    <motion.div 
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      style={{ position: 'fixed', inset: 0, background: '#0a0a0a', zIndex: 9999, display: 'flex', flexDirection: 'column' }}
+    >
+      <div style={{ padding: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(239,68,68,0.2)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <ShieldAlert color="var(--error)" />
+          <span style={{ color: 'var(--error)', fontWeight: 700, letterSpacing: 2 }}>AI INTERVIEW ACTIVE</span>
+        </div>
+        <div style={{ color: timerColor, fontSize: '32px', fontFamily: 'monospace', fontWeight: 'bold' }}>
+          {Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, '0')}
+        </div>
+      </div>
+      
+      <div style={{ flex: 1, display: 'flex', gap: 24, padding: 24, maxWidth: 1200, margin: '0 auto', width: '100%' }}>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 24 }}>
+           {/* Question display */}
+           <div style={{ background: 'rgba(239,68,68,0.05)', border: '1px solid rgba(239,68,68,0.2)', padding: 32, borderRadius: 12 }}>
+              <div style={{ fontSize: 14, color: 'var(--error)', marginBottom: 12, fontWeight: 600 }}>QUESTION {currentIdx + 1} OF {questions.length}</div>
+              <div style={{ fontSize: 24, color: 'white', lineHeight: 1.5 }}>
+                {questions[currentIdx]?.question}
+              </div>
+           </div>
+
+           {/* User Camera */}
+           <div style={{ flex: 1, position: 'relative', borderRadius: 12, overflow: 'hidden', background: '#1a1a1a', border: '1px solid rgba(255,255,255,0.1)' }}>
+              <video ref={videoRef} autoPlay muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover', transform: 'scaleX(-1)' }} />
+              <div style={{ position: 'absolute', top: 16, right: 16, display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(0,0,0,0.5)', padding: '6px 16px', borderRadius: 20 }}>
+                <div style={{ width: 10, height: 10, borderRadius: '50%', background: 'var(--error)', animation: 'pulse 1.5s infinite' }} />
+                <span style={{ color: 'white', fontSize: 12, fontWeight: 700, letterSpacing: 1 }}>RECORDING</span>
+              </div>
+           </div>
+        </div>
+      </div>
+
+      <div style={{ padding: 24, borderTop: '1px solid rgba(239,68,68,0.2)', display: 'flex', justifyContent: 'flex-end', background: '#111' }}>
+        <button onClick={handleNext} style={{ background: 'var(--error)', color: 'white', border: 'none', padding: '16px 32px', fontSize: 16, fontWeight: 'bold', borderRadius: 8, cursor: 'pointer', letterSpacing: 1 }}>
+          {currentIdx === questions.length - 1 ? 'FINISH INTERVIEW' : 'NEXT QUESTION'}
+        </button>
+      </div>
+
+      <style>{`
+        @keyframes pulse {
+          0% { opacity: 1; }
+          50% { opacity: 0.3; }
+          100% { opacity: 1; }
+        }
+      `}</style>
+    </motion.div>
+  );
+}
 
 function FlipCard({ question, index, total }) {
   const [flipped, setFlipped] = useState(false);
@@ -88,8 +202,8 @@ export default function InterviewPage() {
   const [questions, setQuestions] = useState([]);
   const [loading, setLoading] = useState(false);
   const [isLocked, setIsLocked] = useState(true);
-  const [completed, setCompleted] = useState(0);
   const [statusMessage, setStatusMessage] = useState('');
+  const [sessionState, setSessionState] = useState('idle'); // idle, generation, ready, active, review
 
   useEffect(() => {
     supabase.from('analyses').select('*').eq('user_id', user.id).order('created_at', { ascending: false })
@@ -99,32 +213,45 @@ export default function InterviewPage() {
           const best = data.find(a => (a.scores_json?.overall_score || 0) >= 85) || data[0];
           setSelectedAnalysis(best);
           setIsLocked((best.scores_json?.overall_score || 0) < 85);
-          if (best.interview_json) setQuestions(best.interview_json);
+          if (best.interview_json?.length > 0) {
+            setQuestions(best.interview_json);
+            setSessionState('ready');
+          }
         }
       });
   }, [user.id]);
 
-  const startInterview = async () => {
+  const generateNewQuestions = async () => {
     if (!selectedAnalysis) return;
-    setLoading(true); setStatusMessage('Tailoring questions to your profile...');
+    setLoading(true); 
+    setSessionState('generation');
+    setStatusMessage('Tailoring new strict questions to your profile...');
+    setQuestions([]);
     try {
       const stream = streamFetch('/interview/stream', {
         weakAreas: selectedAnalysis.scores_json?.weak_areas || selectedAnalysis.scores_json?.missing_skills || [],
         jdText: selectedAnalysis.jd_text,
         analysisId: selectedAnalysis.id
       });
+      let fetchedQuestions = [];
       for await (const event of stream) {
         if (event.event === 'questions_data') {
-          setQuestions(event.data);
+          fetchedQuestions = event.data;
+          setQuestions(fetchedQuestions);
           await supabase.from('analyses').update({ interview_json: event.data }).eq('id', selectedAnalysis.id);
         } else if (event.event === 'error') {
           throw new Error(event.data.error || 'Interview generation failed');
         }
       }
-      toast.success('Interview questions are ready!');
+      toast.success('Interview rules generated. Get ready.');
+      setSessionState('ready');
     } catch (err) {
       toast.error(err.message || 'Failed to start interview');
-    } finally { setLoading(false); setStatusMessage(''); }
+      setSessionState(questions.length > 0 ? 'ready' : 'idle');
+    } finally { 
+      setLoading(false); 
+      setStatusMessage(''); 
+    }
   };
 
   const score = selectedAnalysis?.scores_json?.overall_score || 0;
@@ -146,37 +273,73 @@ export default function InterviewPage() {
   }
 
   return (
-    <motion.div initial="initial" animate="animate" style={{ maxWidth: 900 }}>
-      <motion.div variants={fadeUp}>
-        <h1 style={{ fontSize: 28, fontWeight: 700, marginBottom: 8 }}>Mock Interview</h1>
-        <p style={{ color: 'var(--text-secondary)', fontSize: 15, marginBottom: 24 }}>Practice with AI-generated questions targeting your weak areas.</p>
-      </motion.div>
+    <>
+      <AnimatePresence>
+        {sessionState === 'active' && (
+          <StrictInterviewRoom questions={questions} onComplete={() => setSessionState('review')} />
+        )}
+      </AnimatePresence>
 
-      {questions.length === 0 ? (
-        <motion.div variants={fadeUp} className="card-static" style={{ padding: 40, textAlign: 'center' }}>
-          <Mic size={40} color="var(--accent)" style={{ marginBottom: 16 }} />
-          <h3 style={{ fontWeight: 600, marginBottom: 8 }}>Start Interview Session</h3>
-          <p style={{ color: 'var(--text-secondary)', fontSize: 14, marginBottom: 20 }}>AI will generate 8 interview questions tailored to your weak areas.</p>
-          <button className="btn-primary" onClick={startInterview} disabled={loading}>
-            {loading ? statusMessage || 'Generating...' : 'Start Interview'}
-          </button>
+      <motion.div initial="initial" animate="animate" style={{ maxWidth: 900, display: sessionState === 'active' ? 'none' : 'block' }}>
+        <motion.div variants={fadeUp}>
+          <h1 style={{ fontSize: 28, fontWeight: 700, marginBottom: 8 }}>Mock Interview Room</h1>
+          <p style={{ color: 'var(--text-secondary)', fontSize: 15, marginBottom: 24 }}>A rigorous, timed AI interview session simulating real pressure.</p>
         </motion.div>
-      ) : (
-        <>
-          {/* Progress */}
-          <motion.div variants={fadeUp} className="card-static" style={{ padding: 16, marginBottom: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: 14, fontWeight: 600 }}>Click cards to flip and reveal answers</span>
-            <button className="btn-secondary" onClick={() => { setQuestions([]); startInterview(); }} style={{ padding: '6px 12px', fontSize: 12 }}>
-              <RotateCcw size={14} /> New Session
+
+        {sessionState === 'idle' || sessionState === 'generation' ? (
+          <motion.div variants={fadeUp} className="card-static" style={{ padding: 40, textAlign: 'center' }}>
+            <Video size={40} color="var(--error)" style={{ marginBottom: 16 }} />
+            <h3 style={{ fontWeight: 600, marginBottom: 8 }}>Generate Interview Scenario</h3>
+            <p style={{ color: 'var(--text-secondary)', fontSize: 14, marginBottom: 20 }}>The AI will act as a strict interviewer. Camera access is required. Prepare yourself.</p>
+            <button className="btn-primary" onClick={generateNewQuestions} disabled={loading} style={{ background: 'var(--error)', border: 'none', color: 'white' }}>
+              {loading ? statusMessage || 'Initializing...' : 'Generate New Questions'}
             </button>
           </motion.div>
+        ) : sessionState === 'ready' ? (
+          <motion.div variants={fadeUp} className="card-static" style={{ padding: 40, textAlign: 'center' }}>
+             <ShieldAlert size={48} color="var(--error)" style={{ marginBottom: 16 }} />
+             <h3 style={{ fontWeight: 600, marginBottom: 8 }}>Interview is Ready</h3>
+             <p style={{ color: 'var(--text-secondary)', fontSize: 14, marginBottom: 24, maxWidth: 400, margin: '0 auto 24px auto' }}>
+               You are about to enter a rigorous interview session. Ensure your camera and microphone are working. You will have 2 minutes per question.
+             </p>
+             <div style={{ display: 'flex', gap: 16, justifyContent: 'center' }}>
+               <button className="btn-primary" onClick={() => setSessionState('active')} style={{ background: 'var(--error)', border: 'none', color: 'white', display: 'flex', alignItems: 'center', gap: 8 }}>
+                 <Play size={18} /> ENTER INTERVIEW
+               </button>
+               <button className="btn-secondary" onClick={generateNewQuestions} disabled={loading}>
+                 Regenerate
+               </button>
+             </div>
+             
+             <div style={{ marginTop: 24 }}>
+               <button onClick={() => setSessionState('review')} style={{ background: 'none', border: 'none', color: 'var(--accent)', textDecoration: 'underline', fontSize: 14, cursor: 'pointer' }}>
+                 Or Review Last Session Answers
+               </button>
+             </div>
+          </motion.div>
+        ) : sessionState === 'review' ? (
+          <motion.div variants={fadeUp}>
+            {/* Progress */}
+            <div className="card-static" style={{ padding: 16, marginBottom: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <span style={{ fontSize: 14, fontWeight: 600, display: 'block' }}>Interview Completed - Review Mode</span>
+                <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Click cards to reveal the model answers</span>
+              </div>
+              <div style={{ display: 'flex', gap: 12 }}>
+                <button className="btn-primary" onClick={() => setSessionState('active')} style={{ background: 'var(--error)', color: 'white', border: 'none', padding: '8px 16px', fontSize: 13 }}>
+                  <RotateCcw size={14} style={{ marginRight: 6 }} /> Re-take Interview
+                </button>
+              </div>
+            </div>
 
-          {/* Cards Grid */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16 }}>
-            {questions.map((q, i) => <FlipCard key={i} question={q} index={i} total={questions.length} />)}
-          </div>
-        </>
-      )}
-    </motion.div>
+            {/* Cards Grid */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16 }}>
+              {questions.map((q, i) => <FlipCard key={i} question={q} index={i} total={questions.length} />)}
+            </div>
+          </motion.div>
+        ) : null}
+      </motion.div>
+    </>
   );
 }
+
