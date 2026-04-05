@@ -20,6 +20,7 @@ function LiveInterviewRoom({ questions, onComplete, onExit, jdText }) {
   const [lastFeedback, setLastFeedback] = useState(null);
   const [silenceCounter, setSilenceCounter] = useState(0);
   const [isRecording, setIsRecording] = useState(false);
+  const [sessionDetails, setSessionDetails] = useState([]);
   
   const videoRef = useRef(null);
   const streamRef = useRef(null);
@@ -158,7 +159,13 @@ function LiveInterviewRoom({ questions, onComplete, onExit, jdText }) {
         answer: finalAnswer,
         jdText: jdText
       });
-      setLastFeedback(feedback);
+      const details = {
+        question: questions[currentIdx].question,
+        answer: finalAnswer,
+        feedback: feedback,
+        model_answer: questions[currentIdx].model_answer_outline
+      };
+      setSessionDetails(prev => [...prev, details]);
       speakText(`AI Review: Score ${feedback.score}%. ${feedback.ai_verdict}`);
       
       setTimeout(() => {
@@ -166,16 +173,24 @@ function LiveInterviewRoom({ questions, onComplete, onExit, jdText }) {
           setCurrentIdx(i => i + 1);
           setIsEvaluating(false);
         } else {
-          onComplete({ switches, focusLevel, transcript });
+          onComplete({ switches, focusLevel, transcript, details: [...sessionDetails, details] });
         }
       }, 5000);
     } catch (err) {
       toast.error("AI Analysis failed. Moving to next.");
+      const details = {
+        question: questions[currentIdx].question,
+        answer: finalAnswer,
+        feedback: { score: 0, feedback: "Evaluation failed", ai_verdict: "N/A" },
+        model_answer: questions[currentIdx].model_answer_outline
+      };
+      setSessionDetails(prev => [...prev, details]);
+
       if (currentIdx < questions.length - 1) {
         setCurrentIdx(i => i + 1);
         setIsEvaluating(false);
       } else {
-        onComplete({ switches, focusLevel, transcript });
+        onComplete({ switches, focusLevel, transcript, details: [...sessionDetails, details] });
       }
     }
   };
@@ -491,7 +506,57 @@ export default function InterviewPage() {
                  <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>AVG FOCUS</div>
                </div>
             </div>
-            <button onClick={() => setSessionState('ready')} className="btn-primary">Review Answers</button>
+            <button onClick={() => setSessionState('review')} className="btn-primary">Review Answers</button>
+          </div>
+        ) : sessionState === 'review' ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <h2 style={{ fontSize: 24, fontWeight: 800 }}>Answer Review</h2>
+                <button onClick={() => setSessionState('ready')} className="btn-secondary">Close Review</button>
+             </div>
+             {(results?.details || []).map((det, idx) => (
+               <div key={idx} className="card-static" style={{ padding: 32 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 11, fontWeight: 900, color: 'var(--accent)', letterSpacing: 1, marginBottom: 8 }}>QUESTION {idx + 1}</div>
+                      <h3 style={{ fontSize: 18, fontWeight: 700, lineHeight: 1.4 }}>{det.question}</h3>
+                    </div>
+                    <div style={{ background: det.feedback?.score >= 80 ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)', color: det.feedback?.score >= 80 ? 'var(--success)' : 'var(--error)', padding: '12px 24px', borderRadius: 12, textAlign: 'center' }}>
+                       <div style={{ fontSize: 24, fontWeight: 900 }}>{det.feedback?.score || 0}%</div>
+                       <div style={{ fontSize: 10, fontWeight: 800 }}>MATCH</div>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 24, marginBottom: 24 }}>
+                    <div style={{ background: 'rgba(255,255,255,0.02)', padding: 20, borderRadius: 12, border: '1px solid var(--border)' }}>
+                       <div style={{ fontSize: 10, fontWeight: 800, opacity: 0.5, marginBottom: 12 }}>YOUR ANSWER</div>
+                       <div style={{ fontSize: 14, lineHeight: 1.6, color: 'var(--text-secondary)' }}>{det.answer}</div>
+                    </div>
+                    <div style={{ background: 'rgba(59,130,246,0.03)', padding: 20, borderRadius: 12, border: '1px solid var(--accent)', borderStyle: 'dashed' }}>
+                       <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--accent)', marginBottom: 12 }}>EXPECTED KEY POINTS</div>
+                       <div style={{ fontSize: 14, lineHeight: 1.6, color: 'var(--text-secondary)' }}>
+                         {Array.isArray(det.model_answer) ? det.model_answer.join(', ') : (det.model_answer || 'N/A')}
+                       </div>
+                    </div>
+                  </div>
+
+                  <div style={{ background: 'var(--bg-elevated)', padding: 24, borderRadius: 12, border: '1px solid var(--border)' }}>
+                     <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+                        <Brain size={18} color="var(--accent)" />
+                        <span style={{ fontSize: 12, fontWeight: 900, letterSpacing: 1 }}>AI AGENT FEEDBACK</span>
+                     </div>
+                     <p style={{ fontSize: 14, lineHeight: 1.7, color: 'var(--text-primary)' }}>{det.feedback?.feedback}</p>
+                     <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--border)', display: 'flex', gap: 20 }}>
+                        <div style={{ fontSize: 12 }}>
+                           <span style={{ opacity: 0.5 }}>Verdict:</span> <span style={{ fontWeight: 700, color: 'var(--accent)' }}>{det.feedback?.ai_verdict}</span>
+                        </div>
+                     </div>
+                  </div>
+               </div>
+             ))}
+             <div style={{ textAlign: 'center', padding: '40px 0' }}>
+                <button onClick={() => setSessionState('ready')} className="btn-primary" style={{ padding: '16px 60px' }}>EXIT REVIEW</button>
+             </div>
           </div>
         ) : (
           <div className="card-static" style={{ padding: 80, textAlign: 'center' }}>
