@@ -1,8 +1,16 @@
 import axios from 'axios';
 import { supabase } from './supabase';
 
+const getBaseUrl = () => {
+  if (import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL;
+  if (typeof window !== 'undefined' && window.location.hostname !== 'localhost') {
+    return '/_/backend/api';
+  }
+  return 'http://localhost:3001/api';
+};
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:3001/api'
+  baseURL: getBaseUrl()
 });
 
 api.interceptors.request.use(async (config) => {
@@ -16,7 +24,7 @@ api.interceptors.request.use(async (config) => {
 // SSE stream consumer — returns async generator of parsed events
 export async function* streamFetch(url, body) {
   const { data: { session } } = await supabase.auth.getSession();
-  const baseURL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+  const baseURL = getBaseUrl();
 
   const response = await fetch(`${baseURL}${url}`, {
     method: 'POST',
