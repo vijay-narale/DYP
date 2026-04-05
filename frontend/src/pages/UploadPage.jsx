@@ -40,7 +40,11 @@ export default function UploadPage() {
       const { data: uploadData, error: uploadError } = await supabase.storage.from('resumes').upload(filePath, file);
       if (uploadError) throw uploadError;
 
-      const { data: { publicUrl } } = supabase.storage.from('resumes').getPublicUrl(filePath);
+      // Since the bucket is private, generate a long-lived signed URL (e.g., 10 years) to store
+      const { data: signedData, error: signedError } = await supabase.storage.from('resumes').createSignedUrl(filePath, 60 * 60 * 24 * 365 * 10);
+      if (signedError) throw signedError;
+      
+      const secureUrl = signedData.signedUrl;
       setProgress(40);
 
       // Parse via backend
@@ -55,7 +59,7 @@ export default function UploadPage() {
       // Save to DB
       const { error: insertError } = await supabase.from('resumes').insert({
         user_id: user.id, name: file.name, nickname: nickname || file.name.replace('.pdf', ''),
-        pdf_url: publicUrl, parsed_json: parsedJSON, file_hash: res.data.file_hash
+        pdf_url: secureUrl, parsed_json: parsedJSON, file_hash: res.data.file_hash
       });
       if (insertError) throw insertError;
 
