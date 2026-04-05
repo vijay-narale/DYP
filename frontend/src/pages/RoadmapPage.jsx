@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Lock, CheckCircle, Circle, ChevronRight, Trophy } from 'lucide-react';
+import { Lock, CheckCircle, Circle, ChevronRight, Trophy, Sparkles, Building2, BookOpen, Target } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import api, { streamFetch } from '../lib/api';
@@ -8,6 +8,23 @@ import toast from 'react-hot-toast';
 import confetti from 'canvas-confetti';
 
 const fadeUp = { initial: { opacity: 0, y: 20 }, animate: { opacity: 1, y: 0 } };
+
+const RoadmapSkeleton = () => (
+  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+    {[1, 2, 3].map(i => (
+      <div key={i} className="card-static" style={{ padding: 24, background: 'rgba(255,255,255,0.02)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
+          <div className="shimmer" style={{ width: 120, height: 20, borderRadius: 4 }} />
+          <div className="shimmer" style={{ width: 80, height: 20, borderRadius: 4 }} />
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div className="shimmer" style={{ width: '100%', height: 40, borderRadius: 8 }} />
+          <div className="shimmer" style={{ width: '90%', height: 40, borderRadius: 8 }} />
+        </div>
+      </div>
+    ))}
+  </div>
+);
 
 export default function RoadmapPage() {
   const { user } = useAuth();
@@ -44,7 +61,10 @@ export default function RoadmapPage() {
 
   const generateRoadmap = async () => {
     if (!selectedAnalysis?.gaps_json) { toast.error('No gap analysis found'); return; }
-    setLoading(true); setStatusMessage('Preparing your learning path...');
+    setLoading(true); setStatusMessage('Analyzing skill gaps...');
+    setTimeout(() => setStatusMessage('Structuring 4-week learning path...'), 2000);
+    setTimeout(() => setStatusMessage('Curating specific resource links...'), 5000);
+    
     try {
       const stream = streamFetch('/roadmap/stream', { gapAnalysis: selectedAnalysis.gaps_json });
       for await (const event of stream) {
@@ -91,9 +111,6 @@ export default function RoadmapPage() {
             <div style={{ height: '100%', borderRadius: 4, background: 'var(--error)', width: `${(score / 85) * 100}%`, transition: 'width 1s' }} />
           </div>
           <span style={{ fontSize: 13, color: 'var(--text-muted)' }} className="font-mono">{score}% / 85%</span>
-          <div className="locked-content" style={{ marginTop: 40, maxWidth: 600, margin: '40px auto' }}>
-            <div className="card-static" style={{ padding: 24, height: 200 }} />
-          </div>
         </motion.div>
       </motion.div>
     );
@@ -101,67 +118,103 @@ export default function RoadmapPage() {
 
   return (
     <motion.div initial="initial" animate="animate" style={{ maxWidth: 900 }}>
-      <motion.div variants={fadeUp}>
-        <h1 style={{ fontSize: 28, fontWeight: 700, marginBottom: 8 }}>Learning Roadmap</h1>
-        <p style={{ color: 'var(--text-secondary)', fontSize: 15, marginBottom: 24 }}>Your personalized 4-week plan to bridge skill gaps.</p>
+      <motion.div variants={fadeUp} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 32 }}>
+        <div>
+          <h1 style={{ fontSize: 32, fontWeight: 800, marginBottom: 8 }}>Learning Roadmap</h1>
+          <p style={{ color: 'var(--text-secondary)' }}>Step-by-step path tailored to your specific JD targets.</p>
+        </div>
+        {roadmap && (
+           <button onClick={generateRoadmap} className="btn-secondary" style={{ fontSize: 12, padding: '8px 16px' }}>
+              <RotateCcw size={14} style={{ marginRight: 6 }} /> Reset Path
+           </button>
+        )}
       </motion.div>
 
-      {!roadmap ? (
-        <motion.div variants={fadeUp} className="card-static" style={{ padding: 40, textAlign: 'center' }}>
-          <Trophy size={40} color="var(--accent)" style={{ marginBottom: 16 }} />
-          <h3 style={{ fontWeight: 600, marginBottom: 8 }}>Generate Your Roadmap</h3>
-          <p style={{ color: 'var(--text-secondary)', fontSize: 14, marginBottom: 20 }}>AI will create a personalized 4-week plan based on your gap analysis.</p>
-          <button className="btn-primary" onClick={generateRoadmap} disabled={loading}>
-            {loading ? statusMessage || 'Generating...' : 'Generate Roadmap'}
+      {loading ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 40 }}>
+           <div style={{ textAlign: 'center', padding: '40px 0' }}>
+              <Sparkles className="pulse-slow" size={32} color="var(--accent)" style={{ marginBottom: 16 }} />
+              <h3 style={{ fontSize: 18, fontWeight: 700 }}>{statusMessage}</h3>
+              <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>We are using AI to find the best tutorials and documents for your gap skills.</p>
+           </div>
+           <RoadmapSkeleton />
+        </div>
+      ) : !roadmap ? (
+        <motion.div variants={fadeUp} className="card-static" style={{ padding: 60, textAlign: 'center', background: 'var(--bg-elevated)' }}>
+          <div style={{ width: 64, height: 64, borderRadius: 16, background: 'rgba(59,130,246,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px' }}>
+            <Target size={32} color="var(--accent)" />
+          </div>
+          <h3 style={{ fontSize: 20, fontWeight: 700, marginBottom: 12 }}>Bridge the Gap</h3>
+          <p style={{ color: 'var(--text-secondary)', fontSize: 14, marginBottom: 32, maxWidth: 400, margin: '0 auto 32px' }}>
+            Transform your missing skills into strengths. Generate a curated 4-week learning path now.
+          </p>
+          <button className="btn-primary" onClick={generateRoadmap} style={{ padding: '14px 40px', fontSize: 15 }}>
+            BUILD MY ROADMAP
           </button>
         </motion.div>
       ) : (
         <>
-          {/* Progress */}
-          <motion.div variants={fadeUp} className="card-static" style={{ padding: 20, marginBottom: 24 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-              <span style={{ fontSize: 14, fontWeight: 600 }}>Overall Progress</span>
-              <span className="font-mono" style={{ fontSize: 14, color: 'var(--accent)' }}>{completedCount}/{totalTasks}</span>
+          <motion.div variants={fadeUp} className="card-static" style={{ padding: 24, marginBottom: 32, borderLeft: '4px solid var(--accent)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <div>
+                <span style={{ fontSize: 13, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 1 }}>Mission Progress</span>
+                <div style={{ fontSize: 20, fontWeight: 800 }}>{Math.round(progressPct)}% Completed</div>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <span style={{ fontSize: 24, fontWeight: 800, color: 'var(--accent)' }}>{completedCount}</span>
+                <span style={{ fontSize: 14, color: 'var(--text-muted)' }}> / {totalTasks} Tasks</span>
+              </div>
             </div>
-            <div style={{ height: 8, borderRadius: 4, background: 'var(--border)' }}>
-              <motion.div initial={{ width: 0 }} animate={{ width: `${progressPct}%` }} transition={{ duration: 1, ease: 'easeOut' }}
-                style={{ height: '100%', borderRadius: 4, background: 'var(--gradient-accent)' }} />
+            <div style={{ height: 10, borderRadius: 5, background: 'var(--border)', overflow: 'hidden' }}>
+              <motion.div initial={{ width: 0 }} animate={{ width: `${progressPct}%` }} transition={{ duration: 1, ease: 'circOut' }}
+                style={{ height: '100%', background: 'var(--gradient-accent)' }} />
             </div>
           </motion.div>
 
-          {/* Week Cards */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {['week1','week2','week3','week4'].map((wk, wi) => {
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {['week1', 'week2', 'week3', 'week4'].map((wk, wi) => {
               const week = roadmap[wk];
               if (!week) return null;
               const isExpanded = expandedWeek === wk;
               const tasks = week.days ? week.days.flatMap(d => d.tasks || []) : week.tasks || [];
+              const weekCompleted = tasks.every(t => completedTasks.has(t.id || `${wk}-${tasks.indexOf(t)}`));
+
               return (
-                <motion.div key={wk} variants={fadeUp} initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: wi * 0.15 }}
-                  className="card-static" style={{ overflow: 'hidden' }}>
+                <motion.div key={wk} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: wi * 0.1 }}
+                  className="card-static" style={{ overflow: 'hidden', borderLeft: isExpanded ? '3px solid var(--accent)' : '1px solid var(--border)' }}>
                   <div onClick={() => setExpandedWeek(isExpanded ? null : wk)}
-                    style={{ padding: '18px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}>
-                    <div>
-                      <span style={{ fontWeight: 700, fontSize: 15 }}>Week {wi + 1}</span>
-                      <span style={{ marginLeft: 12, fontSize: 13, color: 'var(--text-secondary)' }}>{week.theme || week.goal}</span>
+                    style={{ padding: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', background: isExpanded ? 'rgba(59,130,246,0.02)' : 'transparent' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                      <div style={{ width: 40, height: 40, borderRadius: 10, background: weekCompleted ? 'var(--success)' : 'var(--bg-base)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: weekCompleted ? 'white' : 'var(--text-muted)', border: '1px solid var(--border)' }}>
+                        {weekCompleted ? <CheckCircle size={20} /> : <span style={{ fontWeight: 800 }}>{wi + 1}</span>}
+                      </div>
+                      <div>
+                        <div style={{ fontWeight: 800, fontSize: 16 }}>Week {wi + 1}</div>
+                        <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{week.theme || week.goal}</div>
+                      </div>
                     </div>
-                    <ChevronRight size={16} style={{ transform: isExpanded ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s' }} />
+                    <ChevronRight size={18} style={{ transform: isExpanded ? 'rotate(90deg)' : 'none', transition: 'all 0.3s', color: 'var(--text-muted)' }} />
                   </div>
+                  
                   <AnimatePresence>
                     {isExpanded && (
-                      <motion.div initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }} style={{ overflow: 'hidden' }}>
-                        <div style={{ padding: '0 20px 20px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}>
+                        <div style={{ padding: '0 24px 24px', display: 'flex', flexDirection: 'column', gap: 10 }}>
                           {tasks.map((t, ti) => {
                             const tid = t.id || `${wk}-${ti}`;
                             const done = completedTasks.has(tid);
                             return (
-                              <div key={tid} onClick={() => toggleTask(wk, tid)}
-                                style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', borderRadius: 8, background: 'var(--bg-base)', cursor: 'pointer', transition: 'all 0.15s' }}>
-                                {done ? <CheckCircle size={18} color="var(--success)" /> : <Circle size={18} color="var(--text-muted)" />}
-                                <span style={{ fontSize: 13, textDecoration: done ? 'line-through' : 'none', color: done ? 'var(--text-muted)' : 'var(--text-primary)', flex: 1 }}>
-                                  {t.title || t.task}
-                                </span>
-                                {t.duration_mins && <span style={{ fontSize: 11, color: 'var(--text-muted)' }} className="font-mono">{t.duration_mins}m</span>}
+                              <div key={tid} onClick={(e) => { e.stopPropagation(); toggleTask(wk, tid); }}
+                                className="roadmap-task"
+                                style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', borderRadius: 10, background: 'var(--bg-base)', border: '1px solid var(--border)', cursor: 'pointer', opacity: done ? 0.6 : 1 }}>
+                                <div style={{ color: done ? 'var(--success)' : 'var(--text-muted)' }}>
+                                  {done ? <CheckCircle size={20} /> : <Circle size={20} />}
+                                </div>
+                                <div style={{ flex: 1 }}>
+                                  <div style={{ fontSize: 14, fontWeight: 600, textDecoration: done ? 'line-through' : 'none' }}>{t.title || t.task}</div>
+                                  {t.type && <span style={{ fontSize: 10, textTransform: 'uppercase', color: 'var(--accent)', fontWeight: 700 }}>{t.type}</span>}
+                                </div>
+                                {t.duration_mins && <span style={{ fontSize: 11, color: 'var(--text-muted)', background: 'var(--bg-elevated)', padding: '2px 8px', borderRadius: 4 }}>{t.duration_mins}m</span>}
                               </div>
                             );
                           })}
@@ -175,6 +228,12 @@ export default function RoadmapPage() {
           </div>
         </>
       )}
+      <style>{`
+        .pulse-slow { animation: pulse 2s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.5; transform: scale(0.95); } }
+        .roadmap-task:hover { border-color: var(--accent) !important; transform: translateX(4px); }
+      `}</style>
     </motion.div>
   );
 }
+
