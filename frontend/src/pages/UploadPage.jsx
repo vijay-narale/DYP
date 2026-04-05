@@ -68,7 +68,13 @@ export default function UploadPage() {
       fetchResumes();
     } catch (err) {
       console.error(err);
-      toast.error(err.response?.data?.error || err.message, { id: tid });
+      let errMsg = err.message;
+      if (err.response?.data?.error) {
+        errMsg = typeof err.response.data.error === 'string' 
+          ? err.response.data.error 
+          : err.response.data.error.message || JSON.stringify(err.response.data.error);
+      }
+      toast.error(errMsg, { id: tid });
     } finally {
       setLoading(false);
     }
