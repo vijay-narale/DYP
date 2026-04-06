@@ -21,7 +21,23 @@ const FREE_MODELS = [
 ];
 
 function cleanJSON(text) {
-  return text.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+  // Remove markdown code blocks if present
+  let cleaned = text.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+  // Sometimes LLMs add text before the first '{' or after the last '}'
+  const firstBrace = cleaned.indexOf('{');
+  const lastBrace = cleaned.lastIndexOf('}');
+  const firstBracket = cleaned.indexOf('[');
+  const lastBracket = cleaned.lastIndexOf(']');
+
+  // For objects
+  if (firstBrace !== -1 && lastBrace !== -1 && (firstBracket === -1 || firstBrace < firstBracket)) {
+    return cleaned.slice(firstBrace, lastBrace + 1);
+  }
+  // For arrays
+  if (firstBracket !== -1 && lastBracket !== -1) {
+    return cleaned.slice(firstBracket, lastBracket + 1);
+  }
+  return cleaned;
 }
 
 export async function callLLM(prompt, maxTokens = 4096) {
@@ -87,23 +103,27 @@ export async function callLLMParallel(prompts) {
 }
 
 function extractJSON(text, type = 'object') {
-  const cleaned = cleanJSON(text);
-  const regex = type === 'array' ? /\[[\s\S]*\]/ : /\{[\s\S]*\}/;
-  const match = cleaned.match(regex);
-  if (!match) {
-    console.error('Failed to find JSON in:', text);
-    throw new Error('No JSON found in LLM response');
-  }
   try {
-    return JSON.parse(match[0]);
+    const cleaned = cleanJSON(text);
+    return JSON.parse(cleaned);
   } catch (e) {
-    console.error('JSON Parse Error:', e, 'Content:', match[0]);
-    throw new Error('Invalid JSON structure from LLM');
+    console.error('JSON Parse Error:', e, 'Raw Content:', text);
+    // If first attempt fails, try more aggressive regex as fallback
+    const regex = type === 'array' ? /\[[\s\S]*\]/ : /\{[\s\S]*\}/;
+    const match = text.match(regex);
+    if (match) {
+      try {
+        return JSON.parse(match[0]);
+      } catch (e2) {
+        console.error('Regex Fallback JSON Parse Error:', e2, 'Match:', match[0]);
+      }
+    }
+    throw new Error('Invalid JSON structure from LLM. Please try again.');
   }
 }
 
 export async function parseResume(rawText) {
-  const prompt = `You are a resume parser. Extract and return ONLY valid JSON (no markdown, no explanation, no code fences):
+  const prompt = `You are a resume parser. Extract and return ONLY valid raw JSON (no markdown, no explanation, no code fences). Ensure the output is a single valid JSON object:
 {"name":"","email":"","skills":[],"projects":[{"name":"","description":"","tech_stack":[],"impact":""}],"experience":[{"company":"","role":"","duration":"","description":""}],"education":{"degree":"","institution":"","year":"","gpa":""},"certifications":[],"soft_skills":[],"years_of_experience":0}
 
 Resume text:

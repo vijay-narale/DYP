@@ -42,10 +42,10 @@ export default function RoadmapPage() {
       .then(({ data }) => {
         setAnalyses(data || []);
         if (data?.length > 0) {
-          const best = data.find(a => (a.scores_json?.overall_score || 0) >= 85) || data[0];
-          setSelectedAnalysis(best);
-          setIsLocked((best.scores_json?.overall_score || 0) < 85);
-          if (best.roadmap_json) setRoadmap(best.roadmap_json);
+          const selected = data[0];
+          setSelectedAnalysis(selected);
+          setIsLocked(false); // Roadmap is always unlocked if an analysis exists
+          if (selected.roadmap_json) setRoadmap(selected.roadmap_json);
         }
       });
   }, [user.id]);

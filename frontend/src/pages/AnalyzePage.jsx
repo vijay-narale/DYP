@@ -136,7 +136,7 @@ export default function AnalyzePage() {
   })) : [];
 
   const scoreColor = scores ? (scores.overall_score >= 85 ? 'var(--success)' : scores.overall_score >= 65 ? 'var(--warning)' : 'var(--error)') : 'var(--accent)';
-  const scoreBadge = scores ? (scores.overall_score >= 85 ? { text: 'ELIGIBLE', cls: 'badge-success' } : scores.overall_score >= 65 ? { text: 'ALMOST THERE', cls: 'badge-warning' } : { text: 'NEEDS WORK', cls: 'badge-error' }) : null;
+  const scoreBadge = scores ? (scores.overall_score >= 85 ? { text: 'ELITE STATUS', cls: 'badge-success' } : scores.overall_score >= 65 ? { text: 'COMPETITIVE', cls: 'badge-warning' } : { text: 'NEEDS FOCUS', cls: 'badge-error' }) : null;
 
   return (
     <motion.div initial="initial" animate="animate" style={{ maxWidth: 1000 }}>
@@ -233,12 +233,19 @@ export default function AnalyzePage() {
                     {scoreBadge.text}
                   </span>
                   <div style={{ fontSize: 14, color: 'var(--text-secondary)', maxWidth: 400, minHeight: 40 }}>
-                    {scores.one_line_summary || 'Analysis complete.'}
+                    {scores.overall_score >= 85 
+                      ? 'Elite profile match! Both Roadmap and AI Interview Room are now fully accessible.'
+                      : 'Match analyzed. Your learning roadmap is ready to help you bridge the gap.'}
                   </div>
-                  {scores.overall_score >= 85 && (
+                  {scores.overall_score >= 85 ? (
                     <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ delay: 1, type: 'spring' }}
                       style={{ marginTop: 12, padding: '8px 16px', background: 'rgba(34,197,94,0.1)', borderRadius: 8, border: '1px solid rgba(34,197,94,0.2)', fontSize: 13, color: 'var(--success)', fontWeight: 600 }}>
-                      🎉 Elite Status — Roadmap & Interview Unlocked!
+                      🎉 Elite Status — AI Interview Room Unlocked!
+                    </motion.div>
+                  ) : (
+                    <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ delay: 1, type: 'spring' }}
+                      style={{ marginTop: 12, padding: '8px 16px', background: 'rgba(59,130,246,0.1)', borderRadius: 8, border: '1px solid rgba(59,130,246,0.2)', fontSize: 13, color: 'var(--accent)', fontWeight: 600 }}>
+                      🚀 Roadmap Unlocked — Bridge the Gap!
                     </motion.div>
                   )}
                 </div>
@@ -380,7 +387,7 @@ export default function AnalyzePage() {
             {scores.overall_score < 85 && (
               <div className="card-static" style={{ padding: 20, textAlign: 'center', border: '1px dashed var(--border)' }}>
                 <Lock size={20} color="var(--text-muted)" style={{ marginBottom: 8 }} />
-                <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Score 85%+ to unlock <strong>Learning Roadmap</strong> and <strong>Mock Interview</strong></p>
+                <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Score 85%+ to unlock the <strong>AI Interview Room</strong></p>
                 <div style={{ height: 6, borderRadius: 3, background: 'var(--border)', maxWidth: 200, margin: '12px auto 0' }}>
                   <div style={{ height: '100%', borderRadius: 3, background: scoreColor, width: `${(scores.overall_score / 85) * 100}%`, transition: 'width 1s' }} />
                 </div>
