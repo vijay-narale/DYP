@@ -177,7 +177,7 @@ export default function HomePage() {
         padding: '32px 40px', borderTop: '1px solid var(--border)',
         textAlign: 'center', color: 'var(--text-muted)', fontSize: 13,
       }}>
-        © 2026 PlaceIQ — Built for DYP Pimpri Hackathon
+        © 2026 PlaceIQ
       </footer>
     </div>
   );
