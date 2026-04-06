@@ -2,13 +2,22 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
-const API_URL = 'https://openrouter.ai/api/v1/chat/completions';
+const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
+
+const GROQ_API_KEY = process.env.GROQ_API_KEY;
+const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
+
+const GROQ_MODELS = [
+  'llama-3.3-70b-versatile',
+  'llama-3.1-8b-instant',
+  'gemma2-9b-it',
+  'mixtral-8x7b-32768'
+];
 
 const FREE_MODELS = [
   'google/gemini-2.0-flash-exp:free',
   'google/gemini-2.0-flash-lite-preview-02-05:free',
-  'mistralai/mistral-7b-instruct:free',
-  'google/gemma-2-9b-it:free'
+  'mistralai/mistral-7b-instruct:free'
 ];
 
 function cleanJSON(text) {
@@ -17,10 +26,37 @@ function cleanJSON(text) {
 
 export async function callLLM(prompt, maxTokens = 4096) {
   let lastError = null;
+  
+  // 1. Try Groq Primary Models First
+  for (const model of GROQ_MODELS) {
+    try {
+      console.log(`  🚀 Calling LLM (Groq): ${model}...`);
+      const res = await fetch(GROQ_API_URL, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${GROQ_API_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ model, max_tokens: maxTokens, messages: [{ role: 'user', content: prompt }] })
+      });
+      const data = await res.json();
+      if (res.ok && data.choices?.[0]) {
+        console.log(`  ✅ LLM OK: ${model}`);
+        return data.choices[0].message.content;
+      }
+      lastError = data.error?.message || data.error || `${res.status}`;
+      console.log(`  ⚠️ ${model}: ${lastError}`);
+    } catch (err) {
+      lastError = err.message;
+      console.log(`  ❌ ${model} Connection Error: ${err.message}`);
+    }
+  }
+
+  // 2. Fallback to OpenRouter Free Models
   for (const model of FREE_MODELS) {
     try {
-      console.log(`  🚀 Calling LLM: ${model}...`);
-      const res = await fetch(API_URL, {
+      console.log(`  🚀 Calling LLM (OpenRouter): ${model}...`);
+      const res = await fetch(OPENROUTER_API_URL, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
@@ -42,6 +78,7 @@ export async function callLLM(prompt, maxTokens = 4096) {
       console.log(`  ❌ ${model} Connection Error: ${err.message}`);
     }
   }
+  
   throw new Error(`All models failed. Last error: ${lastError}`);
 }
 
