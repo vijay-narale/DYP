@@ -5,10 +5,10 @@ const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 const API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
 const FREE_MODELS = [
-  'google/gemma-3-4b-it:free',
-  'google/gemma-3-12b-it:free',
-  'qwen/qwen3.6-plus:free',
-  'google/gemma-3-27b-it:free'
+  'google/gemini-2.0-flash-exp:free',
+  'google/gemini-2.0-flash-lite-preview-02-05:free',
+  'mistralai/mistral-7b-instruct:free',
+  'google/gemma-2-9b-it:free'
 ];
 
 function cleanJSON(text) {
@@ -19,6 +19,7 @@ export async function callLLM(prompt, maxTokens = 4096) {
   let lastError = null;
   for (const model of FREE_MODELS) {
     try {
+      console.log(`  🚀 Calling LLM: ${model}...`);
       const res = await fetch(API_URL, {
         method: 'POST',
         headers: {
@@ -34,13 +35,14 @@ export async function callLLM(prompt, maxTokens = 4096) {
         console.log(`  ✅ LLM OK: ${model}`);
         return data.choices[0].message.content;
       }
-      lastError = data.error?.message || `${res.status}`;
+      lastError = data.error?.message || data.error || `${res.status}`;
       console.log(`  ⚠️ ${model}: ${lastError}`);
     } catch (err) {
       lastError = err.message;
+      console.log(`  ❌ ${model} Connection Error: ${err.message}`);
     }
   }
-  throw new Error(`All models failed: ${lastError}`);
+  throw new Error(`All models failed. Last error: ${lastError}`);
 }
 
 export async function callLLMParallel(prompts) {
@@ -51,8 +53,16 @@ function extractJSON(text, type = 'object') {
   const cleaned = cleanJSON(text);
   const regex = type === 'array' ? /\[[\s\S]*\]/ : /\{[\s\S]*\}/;
   const match = cleaned.match(regex);
-  if (!match) throw new Error('No JSON found in LLM response');
-  return JSON.parse(match[0]);
+  if (!match) {
+    console.error('Failed to find JSON in:', text);
+    throw new Error('No JSON found in LLM response');
+  }
+  try {
+    return JSON.parse(match[0]);
+  } catch (e) {
+    console.error('JSON Parse Error:', e, 'Content:', match[0]);
+    throw new Error('Invalid JSON structure from LLM');
+  }
 }
 
 export async function parseResume(rawText) {
@@ -102,12 +112,14 @@ Weak: ${JSON.stringify(weakAreas)} JD: ${jdText}`;
   return extractJSON(await callLLM(prompt), 'array');
 }
 
-export async function evaluateInterviewAnswer(question, answer, jdText) {
-  const prompt = `You are a technical interviewer. Evaluate this candidate's answer. Return ONLY valid JSON (no markdown):
+export async function evaluateInterviewAnswer(question, answer, jdText, modelAnswer) {
+  const prompt = `You are a technical interviewer. Evaluate this candidate's answer against the expected key points. 
+  Return ONLY valid JSON (no markdown):
   {"score":<0-100>,"feedback":"","is_correct":<boolean>,"strong_points":[],"missed_points":[],"model_answer_snippet":"","improvement_tips":[],"ai_verdict":"Hireable|Borderline|Needs_Improvement"}
 
   Question: ${question}
   User Answer: ${answer}
+  Expected Key Points: ${JSON.stringify(modelAnswer)}
   Context: ${jdText}`;
   return extractJSON(await callLLM(prompt, 1024));
 }

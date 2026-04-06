@@ -22,6 +22,8 @@ function LiveInterviewRoom({ questions, onComplete, onExit, jdText }) {
   const [isRecording, setIsRecording] = useState(false);
   const [sessionDetails, setSessionDetails] = useState([]);
   
+  const [interimTranscript, setInterimTranscript] = useState('');
+  
   const videoRef = useRef(null);
   const streamRef = useRef(null);
   const recognitionRef = useRef(null);
@@ -68,9 +70,14 @@ function LiveInterviewRoom({ questions, onComplete, onExit, jdText }) {
       recognition.onresult = (event) => {
         let interim = '';
         for (let i = event.resultIndex; i < event.results.length; ++i) {
-          if (event.results[i].isFinal) setTranscript(prev => prev + event.results[i][0].transcript + ' ');
-          else interim += event.results[i][0].transcript;
+          if (event.results[i].isFinal) {
+            setTranscript(prev => prev + event.results[i][0].transcript + ' ');
+            setInterimTranscript('');
+          } else {
+            interim += event.results[i][0].transcript;
+          }
         }
+        setInterimTranscript(interim);
         setSilenceCounter(0); 
       };
       recognition.onend = () => { if (isListening) recognition.start(); };
@@ -157,7 +164,8 @@ function LiveInterviewRoom({ questions, onComplete, onExit, jdText }) {
       const { data: feedback } = await api.post('/interview/evaluate', {
         question: questions[currentIdx].question,
         answer: finalAnswer,
-        jdText: jdText
+        jdText: jdText,
+        modelAnswer: questions[currentIdx].model_answer_outline
       });
       const details = {
         question: questions[currentIdx].question,
@@ -315,8 +323,10 @@ function LiveInterviewRoom({ questions, onComplete, onExit, jdText }) {
                     </div>
                     {isListening && <span className="pulse" style={{ fontSize: 10, color: 'var(--error)', fontWeight: 800 }}>LISTENING...</span>}
                   </div>
-                  <div style={{ height: 100, overflowY: 'auto', fontSize: 16, color: transcript ? 'white' : 'rgba(255,255,255,0.2)', lineHeight: 1.6 }}>
-                    {transcript || "Speak clearly into the microphone. Your audio is being recorded for analysis..."}
+                  <div style={{ height: 100, overflowY: 'auto', fontSize: 16, color: (transcript || interimTranscript) ? 'white' : 'rgba(255,255,255,0.2)', lineHeight: 1.6 }}>
+                    {transcript}
+                    <span style={{ opacity: 0.5 }}>{interimTranscript}</span>
+                    {!(transcript || interimTranscript) && "Speak clearly into the microphone. Your audio is being recorded for analysis..."}
                   </div>
                </div>
 
