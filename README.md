@@ -33,7 +33,3 @@ PlaceIQ acts as an intelligent career consultant, helping users analyze their pr
 - `/frontend`: User interface and client-side logic.
 - `/backend`: API routes, AI integrations, and middleware.
 - `/supabase`: SQL migrations and database configuration.
-
----
-
-Developed with ❤️ at the **DYP Pimpri Hackathon**.
