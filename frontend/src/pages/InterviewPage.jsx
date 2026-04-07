@@ -31,13 +31,24 @@ function LiveInterviewRoom({ questions, onComplete, onExit, jdText }) {
   const chunksRef = useRef([]);
 
   // Natural Voice Selection
-  const speakText = useCallback((text) => {
+  const speakText = useCallback((text, enableListeningAfter = false) => {
     window.speechSynthesis.cancel();
+    setIsListening(false);
     const u = new SpeechSynthesisUtterance(text);
     const voices = window.speechSynthesis.getVoices();
     u.voice = voices.find(v => (v.name.includes('Google') || v.name.includes('Premium')) && v.lang.startsWith('en')) || voices[0];
     u.rate = 1.0;
     u.pitch = 0.95;
+    u.onstart = () => {
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.abort();
+        } catch (e) {}
+      }
+    };
+    u.onend = () => {
+      if (enableListeningAfter) setIsListening(true);
+    };
     window.speechSynthesis.speak(u);
   }, []);
 
@@ -147,12 +158,12 @@ function LiveInterviewRoom({ questions, onComplete, onExit, jdText }) {
 
   useEffect(() => {
     if (questions[currentIdx]) {
-      speakText(`Question ${currentIdx + 1}: ${questions[currentIdx].question}`);
       setTranscript('');
       setManualAnswer('');
-      setIsListening(true);
+      setIsListening(false);
       setLastFeedback(null);
       setTimeLeft(120);
+      speakText(`Question ${currentIdx + 1}: ${questions[currentIdx].question}`, true);
     }
   }, [currentIdx, questions, speakText]);
 
@@ -208,6 +219,34 @@ function LiveInterviewRoom({ questions, onComplete, onExit, jdText }) {
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       style={{ position: 'fixed', inset: 0, background: '#050505', zIndex: 9999, display: 'flex', flexDirection: 'column', color: 'white' }}
     >
+      {/* Floating Interviewer */}
+      <motion.div
+        drag
+        dragMomentum={false}
+        style={{
+          position: 'absolute',
+          top: 80,
+          right: 560,
+          width: 140,
+          height: 140,
+          borderRadius: '50%',
+          overflow: 'hidden',
+          border: '3px solid var(--accent)',
+          boxShadow: '0 10px 30px rgba(0,0,0,0.5)',
+          cursor: 'grab',
+          zIndex: 10000,
+          background: '#000'
+        }}
+        whileDrag={{ scale: 1.05, cursor: 'grabbing' }}
+      >
+        <img 
+          src="https://images.unsplash.com/photo-1560250097-0b93528c311a?q=80&w=256&auto=format&fit=crop" 
+          alt="AI Interviewer"
+          style={{ width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' }}
+          draggable="false"
+        />
+      </motion.div>
+
       {/* Header HUD */}
       <div style={{ padding: '16px 32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.02)', borderBottom: '1px solid rgba(255,255,255,0.1)', backdropFilter: 'blur(20px)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
