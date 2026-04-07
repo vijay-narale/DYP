@@ -1,6 +1,6 @@
 # 🚀 PlaceIQ - AI Career Co-Pilot
 
-PlaceIQ is an advanced AI-driven platform designed to bridge the gap between candidate skillsets and industry requirements. Developed for the **DYP Pimpri Hackathon**, it leverages Large Language Models (LLMs) to provide actionable insights for career growth and recruitment.
+PlaceIQ is an advanced AI-driven platform designed to bridge the gap between candidate skillsets and industry requirements.It leverages Large Language Models (LLMs) to provide actionable insights for career growth and recruitment.
 
 ---
 
