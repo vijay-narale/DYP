@@ -24,6 +24,7 @@ function LiveInterviewRoom({ questions, onComplete, onExit, jdText }) {
   
   const [interimTranscript, setInterimTranscript] = useState('');
   
+  const isListeningRef = useRef(false);
   const videoRef = useRef(null);
   const streamRef = useRef(null);
   const recognitionRef = useRef(null);
@@ -70,10 +71,14 @@ function LiveInterviewRoom({ questions, onComplete, onExit, jdText }) {
     a.click();
   };
 
+  useEffect(() => {
+    isListeningRef.current = isListening;
+  }, [isListening]);
+
   // Speech Recognition
   useEffect(() => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (SpeechRecognition) {
+    if (SpeechRecognition && !recognitionRef.current) {
       const recognition = new SpeechRecognition();
       recognition.continuous = true;
       recognition.interimResults = true;
@@ -91,14 +96,21 @@ function LiveInterviewRoom({ questions, onComplete, onExit, jdText }) {
         setInterimTranscript(interim);
         setSilenceCounter(0); 
       };
-      recognition.onend = () => { if (isListening) recognition.start(); };
+      recognition.onend = () => { 
+        if (isListeningRef.current) {
+          try { recognition.start(); } catch(e) {}
+        }
+      };
       recognitionRef.current = recognition;
     }
-  }, [isListening]);
+  }, []);
 
   useEffect(() => {
-    if (isListening) recognitionRef.current?.start();
-    else recognitionRef.current?.stop();
+    if (isListening) {
+      try { recognitionRef.current?.start(); } catch(e) {}
+    } else {
+      try { recognitionRef.current?.stop(); } catch(e) {}
+    }
   }, [isListening]);
 
   // Timer Logic & Auto-Submit
@@ -229,7 +241,7 @@ function LiveInterviewRoom({ questions, onComplete, onExit, jdText }) {
           right: 560,
           width: 140,
           height: 140,
-          borderRadius: '50%',
+          borderRadius: 16,
           overflow: 'hidden',
           border: '3px solid var(--accent)',
           boxShadow: '0 10px 30px rgba(0,0,0,0.5)',
