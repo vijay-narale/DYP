@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import { Upload, GitCompareArrows, Map, Mic, TrendingUp, Users, BarChart3, ArrowRight, CheckCircle, Zap, Target } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Upload, GitCompareArrows, Map, Mic, TrendingUp, Users, BarChart3, ArrowRight, CheckCircle, Zap, Target, Search, FileText, X, Play } from 'lucide-react';
 
 const fadeUp = {
   initial: { opacity: 0, y: 30 },
@@ -11,6 +11,20 @@ const fadeUp = {
 const stagger = { animate: { transition: { staggerChildren: 0.1 } } };
 
 export default function HomePage() {
+  const [showSimulation, setShowSimulation] = useState(false);
+  const [simStep, setSimStep] = useState(0);
+
+  useEffect(() => {
+    if (showSimulation) {
+      setSimStep(0);
+      const t1 = setTimeout(() => setSimStep(1), 1000); // UI init
+      const t2 = setTimeout(() => setSimStep(2), 2500); // Uploading
+      const t3 = setTimeout(() => setSimStep(3), 4500); // Scanning
+      const t4 = setTimeout(() => setSimStep(4), 7000); // Done
+      return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); clearTimeout(t4); };
+    }
+  }, [showSimulation]);
+
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg-base)' }}>
 
@@ -45,9 +59,9 @@ export default function HomePage() {
             <Link to="/analyze" className="btn-primary" style={{ padding: '14px 28px', fontSize: 15, borderRadius: 12 }}>
               Analyze Now <ArrowRight size={18} />
             </Link>
-            <a href="#features" className="btn-secondary" style={{ padding: '14px 28px', fontSize: 15, borderRadius: 12 }}>
-              Learn More
-            </a>
+            <button onClick={() => setShowSimulation(true)} className="btn-secondary" style={{ padding: '14px 28px', fontSize: 15, borderRadius: 12, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Play size={18} /> Learn More
+            </button>
           </div>
         </motion.div>
 
@@ -179,6 +193,87 @@ export default function HomePage() {
       }}>
         © 2026 PlaceIQ
       </footer>
+
+      {/* ===== SIMULATION MODAL ===== */}
+      <AnimatePresence>
+        {showSimulation && (
+          <motion.div 
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(10px)' }}
+          >
+            <motion.div 
+              initial={{ scale: 0.9, y: 30 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, y: 30 }}
+              style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 24, padding: 0, width: '90%', maxWidth: 800, overflow: 'hidden', boxShadow: '0 30px 100px rgba(0,0,0,0.5)', position: 'relative' }}
+            >
+              <button 
+                onClick={() => setShowSimulation(false)} 
+                style={{ position: 'absolute', top: 20, right: 20, background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: '50%', width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', cursor: 'pointer', zIndex: 10 }}
+              >
+                <X size={18} />
+              </button>
+
+              <div style={{ background: 'var(--bg-base)', padding: '24px 32px', borderBottom: '1px solid var(--border)', textAlign: 'center' }}>
+                 <h2 style={{ fontSize: 20, fontWeight: 700 }}>Project Interactive Simulation</h2>
+                 <p style={{ color: 'var(--text-secondary)', fontSize: 13, marginTop: 4 }}>See how our proprietary AI transforms a raw resume into a personalized roadmap</p>
+              </div>
+
+              <div style={{ padding: 40, background: 'var(--bg-elevated)', minHeight: 400, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+                {simStep === 0 && (
+                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ textAlign: 'center' }}>
+                    <div className="shimmer" style={{ width: 80, height: 80, borderRadius: '50%', margin: '0 auto 24px', background: 'var(--accent)' }} />
+                    <h3 style={{ fontSize: 24, fontWeight: 700 }}>Initializing Simulation Engine...</h3>
+                  </motion.div>
+                )}
+                {simStep === 1 && (
+                  <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} style={{ textAlign: 'center' }}>
+                    <Upload size={64} color="var(--text-secondary)" style={{ margin: '0 auto 24px' }} />
+                    <h3 style={{ fontSize: 24, fontWeight: 700, marginBottom: 12 }}>Step 1: Resume Parsed</h3>
+                    <div style={{ background: 'rgba(255,255,255,0.05)', padding: 20, borderRadius: 16, width: 400, border: '1px dashed var(--border)' }}>
+                      <FileText size={32} color="var(--accent)" style={{ marginBottom: 16 }} />
+                      <div style={{ height: 8, background: 'var(--border)', borderRadius: 4, width: '80%', marginBottom: 10 }} />
+                      <div style={{ height: 8, background: 'var(--border)', borderRadius: 4, width: '60%', marginBottom: 10 }} />
+                      <div style={{ height: 8, background: 'var(--border)', borderRadius: 4, width: '40%' }} />
+                    </div>
+                  </motion.div>
+                )}
+                {simStep === 2 && (
+                  <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} style={{ textAlign: 'center' }}>
+                    <Search size={64} color="var(--accent)" style={{ margin: '0 auto 24px', animation: 'spin 3s linear infinite' }} />
+                    <h3 style={{ fontSize: 24, fontWeight: 700, marginBottom: 12 }}>Step 2: AI Scanning for JD Match</h3>
+                    <p style={{ color: 'var(--text-secondary)', marginBottom: 24 }}>Cross-referencing keywords and experience against 50,000+ data points...</p>
+                    <div style={{ width: 400, background: 'var(--bg-base)', height: 8, borderRadius: 4, overflow: 'hidden' }}>
+                      <motion.div initial={{ width: '0%' }} animate={{ width: '100%' }} transition={{ duration: 2 }} style={{ height: '100%', background: 'var(--accent)' }} />
+                    </div>
+                  </motion.div>
+                )}
+                {simStep >= 3 && (
+                  <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} style={{ textAlign: 'center', width: '100%', maxWidth: 500 }}>
+                    <div style={{ display: 'flex', gap: 20, justifyContent: 'center', marginBottom: 32 }}>
+                       <div style={{ padding: 24, background: 'rgba(16,185,129,0.1)', borderRadius: 20, border: '1px solid rgba(16,185,129,0.2)', flex: 1 }}>
+                          <CheckCircle size={32} color="#10b981" style={{ margin: '0 auto 12px' }} />
+                          <div style={{ fontSize: 32, fontWeight: 800, color: '#10b981' }}>87%</div>
+                          <div style={{ fontSize: 11, fontWeight: 700, color: '#10b981', letterSpacing: 1 }}>MATCH SCORE</div>
+                       </div>
+                       <div style={{ padding: 24, background: 'var(--bg-base)', borderRadius: 20, border: '1px solid var(--border)', flex: 1 }}>
+                          <Map size={32} color="var(--accent)" style={{ margin: '0 auto 12px' }} />
+                          <div style={{ fontSize: 32, fontWeight: 800, color: 'var(--accent)' }}>4 Wk</div>
+                          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', letterSpacing: 1 }}>ROADMAP BUILT</div>
+                       </div>
+                    </div>
+                    {simStep === 4 && (
+                      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                        <h3 style={{ fontSize: 20, fontWeight: 700, marginBottom: 16 }}>Ready for the Mock Interview?</h3>
+                        <p style={{ color: 'var(--text-secondary)', fontSize: 14, marginBottom: 24 }}>Our real-time AI Agent has queued 5 technical questions based on your weak areas.</p>
+                        <button onClick={() => setShowSimulation(false)} className="btn-primary" style={{ padding: '14px 40px', fontSize: 16 }}>Complete Simulation</button>
+                      </motion.div>
+                    )}
+                  </motion.div>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
